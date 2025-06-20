@@ -79,7 +79,7 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
             morph_video_data = self.read_uploaded_file("video/");
             if morph_video_data:
                 os.makedirs("temp", exist_ok=True)
-                with open("temp/morph_video.jpg", "wb") as f:
+                with open("temp/morph_video.mp4", "wb") as f:
                     f.write(morph_video_data)
                 self.send_response(200)
                 self.end_headers()

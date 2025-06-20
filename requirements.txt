@@ -1,3 +1,7 @@
 opencv-python
 runwayml
 python-dotenv
+dlib
+numpy
+scipy
+matplotlib

@@ -1,0 +1,3 @@
+[submodule "auxiliary/face-movie"]
+	path = auxiliary/face-movie
+	url = https://github.com/andrewdcampbell/face-movie.git
