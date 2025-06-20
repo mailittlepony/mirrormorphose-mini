@@ -5,3 +5,5 @@ dlib
 numpy
 scipy
 matplotlib
+mediapipe
+tflite-runtime
