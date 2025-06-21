@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>MirrorMorphose Mini</title>
+    <script src="static/js/index.js"></script>
+</head>
+
+<body>
+    <form id="uploadForm" method="POST" action="/upload_user_photo" enctype="multipart/form-data">
+        <input type="file" name="photo" accept="image/png, image/jpeg">
+        <button type="submit">Upload</button>
+    </form>
+
+    <div id="uploadResult" style="margin-top: 1em; font-weight: bold;"></div>
+</body>
+
+</html>
