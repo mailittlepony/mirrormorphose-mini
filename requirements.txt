@@ -7,3 +7,5 @@ scipy
 matplotlib
 mediapipe
 tflite-runtime
+rembg
+onnxruntime
