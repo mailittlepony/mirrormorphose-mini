@@ -9,7 +9,7 @@ import cv2
 import camera as cam
 import http_server
 import shared
-# from face_recognition import FaceDetector
+from face_recognition import FaceDetector
 import numpy as np
 # import display
 
@@ -17,23 +17,28 @@ USE_WEBCAM = True  # Set False when running on Raspberry Pi
 
 camera, get_frame = cam.init_webcam() if USE_WEBCAM else cam.init_picam2()
 
-# face_detector = FaceDetector("models/eye_direction_model.tflite")
+face_detector = FaceDetector("models/eye_direction_model.tflite")
 
 def gaze_start_callback():
+    print("Gaze started")
     pass
 
 def gaze_end_callback():
+    print("Gaze ended")
     pass
 
 def run():
     http_server.start_non_blocking()
     # display.init()
 
+    face_detector.set_gaze_start_callback(gaze_start_callback)
+    face_detector.set_gaze_end_callback(gaze_end_callback)
+
     try:
         while True:
             frame = get_frame()
 
-            # face_detector.process_frame(frame)
+            face_detector.process_frame(frame)
 
             with shared.lock:
                 shared.shared_data["last_camera_frame"] = frame
