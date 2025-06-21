@@ -17,14 +17,14 @@ class FaceDetector:
         self.threshold_time = threshold_time
         self.class_labels = ['forward_look', 'close_look', 'left_look', 'right_look']
 
-        self.interpreter = self.load_model(model_path)
+        self.interpreter = self._load_model(model_path)
         self.input_details = self.interpreter.get_input_details()
         self.output_details = self.interpreter.get_output_details()
 
         self.mp_face_mesh = mp.solutions.face_mesh
         self.face_mesh = self.mp_face_mesh.FaceMesh(refine_landmarks=True)
 
-        self.__gaze_detector_callback = None
+        self._gaze_detector_callback = None
         self.start_stare = None
         self.blink_threshold = 0.1 
         self.blink_start = None
@@ -33,12 +33,12 @@ class FaceDetector:
         self.LEFT_EYE = [33, 133]
         self.RIGHT_EYE = [362, 263]
 
-    def load_model(self, path):
+    def _load_model(self, path):
         interpreter = Interpreter(model_path=path)
         interpreter.allocate_tensors()
         return interpreter
 
-    def get_eye_images(self, frame):
+    def _get_eye_images(self, frame):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.face_mesh.process(rgb)
         eye_imgs = []
@@ -64,7 +64,7 @@ class FaceDetector:
         return eye_imgs
 
 
-    def predict(self, eye_img):
+    def _predict(self, eye_img):
         input_data = np.expand_dims(eye_img.astype(np.float32) / 255.0, axis=0)
         self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
         self.interpreter.invoke()
@@ -72,14 +72,14 @@ class FaceDetector:
         return self.class_labels[np.argmax(output_data[0])]
 
     def process_frame(self, frame):
-        eye_imgs = self.get_eye_images(frame)
+        eye_imgs = self._get_eye_images(frame)
         current_time = time.time()
 
         if eye_imgs:
             self.blink_start = None  
             eye_input = np.hstack(eye_imgs) if len(eye_imgs) == 2 else eye_imgs[0]
             eye_input = cv2.resize(eye_input, self.input_shape)
-            prediction = self.predict(eye_input)
+            prediction = self._predict(eye_input)
 
             cv2.putText(frame, f"Prediction: {prediction}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
@@ -88,8 +88,8 @@ class FaceDetector:
                     self.start_stare = current_time
                 elif current_time - self.start_stare >= self.threshold_time:
                     print("forward gaze detected")
-                    if self.__gaze_detector_callback:
-                        self.__gaze_detector_callback()
+                    if self._gaze_detector_callback:
+                        self._gaze_detector_callback()
             else:
                 self.start_stare = None
 
@@ -102,5 +102,5 @@ class FaceDetector:
         cv2.imshow("Eye Gaze", frame)
 
 
-    def set_gaze_detector(self, callback):
-        self.__gaze_detector_callback =  callback
+    def set_gaze_detector_callback(self, callback):
+        self._gaze_detector_callback =  callback
