@@ -20,8 +20,9 @@ import subprocess
 import image_processing
 
 # ==== VARIABLES ====
-URL = "http://192.168.11.41:8000"
+URL = "http://192.168.11.40:8000"
 TEMP_DIR = "temp"
+TEMP_REMBG_DIR = "temp/temp_rembg"
 CAPTURE_IMG = os.path.join(TEMP_DIR, "capture.jpg")
 VIDEO_FRAME_IMG = os.path.join(TEMP_DIR, "video_frame.jpg")
 CAPTURE_REMBG = os.path.join(TEMP_DIR, "capture_rembg.jpg")
@@ -74,14 +75,14 @@ def generate_morph(a_path, b_path):
         print("[ERROR] One or both image paths are invalid.")
         return
 
-    os.makedirs(TEMP_DIR, exist_ok=True)
     os.makedirs(ALIGNED_DIR, exist_ok=True)
+    os.makedirs(TEMP_REMBG_DIR, exist_ok=True)
 
     try:
         print("[INFO] Aligning face images...")
         subprocess.run([
             "python", FACE_ALIGN_SCRIPT,
-            "-images", TEMP_DIR,
+            "-images", TEMP_REMBG_DIR,
             "-target", a_path,
             "-overlay",
             "-outdir", ALIGNED_DIR
@@ -131,11 +132,12 @@ def send_video(video_path):
 
 
 def remove_background_for_images(image_paths):
+    os.makedirs(TEMP_REMBG_DIR, exist_ok=True)
     for image_path in image_paths:
         filename, ext = os.path.splitext(os.path.basename(image_path))
-        output_path = os.path.join(TEMP_DIR, f"{filename}_rembg{ext}")
-        print(f"[INFO] Removing background: {image_path} → {output_path}")
+        output_path = os.path.join(TEMP_REMBG_DIR, f"{filename}_rembg{ext}")
         image_processing.remove_background(image_path, output_path)
+        print("[SUCCESS] Background removed successfully!")
 
 
 # ==== MAIN ====
