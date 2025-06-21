@@ -12,7 +12,7 @@ import mediapipe as mp
 from tensorflow.lite.python.interpreter import Interpreter
 
 class FaceDetector:
-    def __init__(self, model_path, input_shape=(64, 64), camera_index=0, threshold_time=2.0):
+    def __init__(self, model_path, input_shape=(64, 64), camera_index=0, threshold_time=3.0):
         self.input_shape = input_shape
         self.threshold_time = threshold_time
         self.class_labels = ['forward_look', 'close_look', 'left_look', 'right_look']
@@ -24,10 +24,12 @@ class FaceDetector:
         self.mp_face_mesh = mp.solutions.face_mesh
         self.face_mesh = self.mp_face_mesh.FaceMesh(refine_landmarks=True)
 
-        self._gaze_detector_callback = None
-        self.start_stare = None
-        self.blink_threshold = 0.1 
-        self.blink_start = None
+        self.lookaway_start = None
+        self.gaze_active = False
+        self.threshold_time = 3.0              
+        self.lookaway_grace_period = 0.5      
+        self._gaze_start_callback = None
+        self._gaze_end_callback = None
 
 
         self.LEFT_EYE = [33, 133]
@@ -50,7 +52,6 @@ class FaceDetector:
                         x = int(face_landmarks.landmark[idx].x * frame.shape[1])
                         y = int(face_landmarks.landmark[idx].y * frame.shape[0])
                         eye_coords.append((x, y))
-                        cv2.circle(frame, (x, y), 2, (0, 0, 255), -1)  # draw red dot
 
                     x_min = max(min(p[0] for p in eye_coords) - 5, 0)
                     x_max = min(max(p[0] for p in eye_coords) + 5, frame.shape[1])
@@ -62,7 +63,6 @@ class FaceDetector:
                         eye_img_resized = cv2.resize(eye_img, self.input_shape)
                         eye_imgs.append(eye_img_resized)
         return eye_imgs
-
 
     def _predict(self, eye_img):
         input_data = np.expand_dims(eye_img.astype(np.float32) / 255.0, axis=0)
@@ -76,31 +76,47 @@ class FaceDetector:
         current_time = time.time()
 
         if eye_imgs:
-            self.blink_start = None  
             eye_input = np.hstack(eye_imgs) if len(eye_imgs) == 2 else eye_imgs[0]
             eye_input = cv2.resize(eye_input, self.input_shape)
             prediction = self._predict(eye_input)
 
-            cv2.putText(frame, f"Prediction: {prediction}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-            if prediction == 'forward_look':
+            if prediction == "forward_look":
+                self.lookaway_start = None
                 if self.start_stare is None:
                     self.start_stare = current_time
-                elif current_time - self.start_stare >= self.threshold_time:
-                    print("forward gaze detected")
-                    if self._gaze_detector_callback:
-                        self._gaze_detector_callback()
+                elif not self.gaze_active and (current_time - self.start_stare >= self.threshold_time):
+                    self.gaze_active = True
+                    if self._gaze_start_callback:
+                        self._gaze_start_callback()
+            else:
+                if self.gaze_active:
+                    if self.lookaway_start is None:
+                        self.lookaway_start = current_time
+                    elif current_time - self.lookaway_start >= self.lookaway_grace_period:
+                        self.gaze_active = False
+                        self.start_stare = None
+                        self.lookaway_start = None
+                        if self._gaze_end_callback:
+                            self._gaze_end_callback()
+                else:
+                    self.start_stare = None
+                    self.lookaway_start = None
+        else:
+            if self.gaze_active:
+                if self.lookaway_start is None:
+                    self.lookaway_start = current_time
+                elif current_time - self.lookaway_start >= self.lookaway_grace_period:
+                    self.gaze_active = False
+                    self.start_stare = None
+                    self.lookaway_start = None
+                    if self._gaze_end_callback:
+                        self._gaze_end_callback()
             else:
                 self.start_stare = None
+                self.lookaway_start = None
 
-        else:
-            if self.blink_start is None:
-                self.blink_start = current_time
-            elif current_time - self.blink_start >= self.blink_threshold:
-                self.start_stare = None
-
-        cv2.imshow("Eye Gaze", frame)
-
-
-    def set_gaze_detector_callback(self, callback):
-        self._gaze_detector_callback =  callback
+    def set_gaze_start_callback(self, callback):
+        self._gaze_start_callback =  callback
+    
+    def set_gaze_end_callback(self, callback):
+        self._gaze_end_callback = callback
