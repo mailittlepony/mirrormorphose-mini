@@ -13,8 +13,7 @@ from mimetypes import guess_type
 import os
 import api
 import shared
-
-STATIC_DIR = "static"
+from shared import STATIC_DIR, RAM_DISK
 
 class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
 # Override
@@ -86,10 +85,6 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
     POST Handlers
     """
     def _handle_upload_user_photo(self):
-        def runway_task_end(output, ret):
-            shared.shared_data["runway_task_output"] = output
-            print(ret)
-
         # Parse the multipart form data
         form = FieldStorage(
             fp=self.rfile,
@@ -114,13 +109,13 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            with open("user_photo.jpg", 'wb') as out_file:
+            with open(f"{RAM_DISK}/user_photo.jpg", 'wb') as out_file:
                 while True:
                     chunk = fileitem.file.read(8192)
                     if not chunk:
                         break
                     out_file.write(chunk)
-                    api.runway_generate_video(fileitem, runway_task_end)
+                    api.runway_generate_video(fileitem)
             self._send_response_str(200, f"Uploaded successfully. Sent to Runway API.")
         except Exception as e:
             self._send_response_str(500, f"Error saving file: {e}")
@@ -141,7 +136,7 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
             file_data = self.rfile.read(content_length)
 
             os.makedirs("temp", exist_ok=True)
-            with open("temp/morph_video.mp4", "wb") as f:
+            with open(f"{RAM_DISK}/morph_video.mp4", "wb") as f:
                 f.write(file_data)
 
             self._send_response_str(200, "Face morph video uploaded successfully.")
@@ -152,13 +147,13 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
     def _handle_get_video_frame_for_morph(self):
         try:
             with shared.lock:
-                video_ready = shared.shared_data.get("runway_task_output") is not None
+                task_status = shared.shared_data.get("runway_task_status")
 
-            if not video_ready:
+            if task_status == 1:
                 self._send_response_str(404, "Runway video not downloaded yet.")
                 return
 
-            video_path = "temp/generated_video.mp4"
+            video_path = f"{RAM_DISK}/generated_video.mp4"
             if not os.path.isfile(video_path):
                 self._send_response_str(404, "Video file not found.")
                 return

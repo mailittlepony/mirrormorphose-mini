@@ -7,10 +7,14 @@
 
 from threading import Lock
 
+RAM_DISK = "ramdisk"
+TEMP_DIR = "temp"
+STATIC_DIR = "static"
+
 shared_data = {
     "user_photo": None,
     "last_camera_frame": None,
-    "runway_task_output": None
+    "runway_task_status": 0
 }
 
 lock = Lock()
