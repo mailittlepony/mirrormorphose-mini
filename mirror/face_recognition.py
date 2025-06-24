@@ -9,10 +9,13 @@ import cv2
 import numpy as np
 import time
 import mediapipe as mp
-from tensorflow.lite.python.interpreter import Interpreter
+try:
+    from tensorflow.lite.python.interpreter import Interpreter
+except ImportError:
+    from tflite_runtime.interpreter import Interpreter
 
 class FaceDetector:
-    def __init__(self, model_path, _input_shape=(64, 64), camera_index=0, threshold_time):
+    def __init__(self, model_path, _input_shape=(64, 64), camera_index=0):
         self._input_shape = _input_shape
         self._class_labels = ['forward_look', 'close_look', 'left_look', 'right_look']
 

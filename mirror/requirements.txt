@@ -1,0 +1,6 @@
+opencv-python
+mediapipe
+tflite-runtime
+runwayml
+python-dotenv
+requests
