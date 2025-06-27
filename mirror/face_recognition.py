@@ -8,263 +8,216 @@
 import cv2
 import numpy as np
 import time
-import mediapipe as mp
-try:
-    from tensorflow.lite.python.interpreter import Interpreter
-except ImportError:
-    from tflite_runtime.interpreter import Interpreter
+from collections import deque
 
-class FaceDetector:
-    def __init__(self, model_path, _input_shape=(64, 64), camera_index=0):
+try:
+    from tflite_runtime.interpreter import Interpreter
+except ImportError:
+    from tensorflow.lite.python.interpreter import Interpreter
+
+class LightweightFaceDetector:
+    def __init__(self, model_path, face_cascade_path, eye_cascade_path, _input_shape=(64, 64)):
         self._input_shape = _input_shape
-        self._class_labels = ['forward_look', 'close_look', 'left_look', 'right_look']
+        self._class_labels = ['forward', 'not_forward']
 
         self._interpreter = self._load_model(model_path)
         self._input_details = self._interpreter.get_input_details()
         self._output_details = self._interpreter.get_output_details()
 
-        self._mp_face_mesh = mp.solutions.face_mesh
-        self._face_mesh = self._mp_face_mesh.FaceMesh(refine_landmarks=True)
+        self._face_cascade = cv2.CascadeClassifier(face_cascade_path)
+        self._eye_cascade = cv2.CascadeClassifier(eye_cascade_path)
+        if self._face_cascade.empty() or self._eye_cascade.empty():
+            raise IOError(f"Could not load Haar cascade files from {face_cascade_path} or {eye_cascade_path}")
 
         self._lookaway_start = None
         self._gaze_active = False
-        self.threshold_time = 1.5            
-        self.lookaway_grace_period = 0.5
+        self.threshold_time = 1.5
+        self.lookaway_grace_period = 0.5 
         self._start_stare = None
+        self.last_known_prediction = "looking_away"
 
         self._gaze_start_callback = None
         self._gaze_end_callback = None
 
-        self._LEFT_EYE = [33, 133]
-        self._RIGHT_EYE = [362, 263]
-
         self._tracker = None
-        self._tracking_bbox = None
-
-        self._closest_face_id = None
-        self._closest_face_history = []  
-        self._history_length = 5  
+        self.tracking_bbox = None
+        self._frame_counter = 0
+        self._detection_interval = 10
+        self.prediction_history = deque(maxlen=5)
 
     def _load_model(self, path):
-        _interpreter = Interpreter(model_path=path)
-        _interpreter.allocate_tensors()
-        return _interpreter
+        interpreter = Interpreter(model_path=path)
+        interpreter.allocate_tensors()
+        return interpreter
 
-    def _get_face_bboxes_and_depths(self, frame):
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self._face_mesh.process(rgb)
-
-        if not results.multi_face_landmarks:
-            return []
-
-        faces = []
-        h, w, _ = frame.shape
-
-        for face_landmarks in results.multi_face_landmarks:
-            x_coords = [lm.x * w for lm in face_landmarks.landmark]
-            y_coords = [lm.y * h for lm in face_landmarks.landmark]
-            z_coords = [lm.z for lm in face_landmarks.landmark]
-
-            x_min, x_max = int(min(x_coords)), int(max(x_coords))
-            y_min, y_max = int(min(y_coords)), int(max(y_coords))
-            bbox = (x_min, y_min, x_max - x_min, y_max - y_min)
-
-            avg_z = sum(z_coords) / len(z_coords)
-
-            faces.append({
-                "landmarks": face_landmarks,
-                "bbox": bbox,
-                "avg_z": avg_z
-            })
-        return faces
+    def _detect_faces(self, gray_frame):
+        return self._face_cascade.detectMultiScale(gray_frame, 1.1, 5)
 
     def _select_closest_face(self, faces):
-        if not faces:
+        if len(faces) == 0:
             return None
-        closest_idx = 0
-        min_z = faces[0]["avg_z"]
-        for i, face in enumerate(faces[1:], start=1):
-            if face["avg_z"] < min_z:
-                min_z = face["avg_z"]
-                closest_idx = i
-        return closest_idx
-
-    def _update_closest_face_history(self, face_id):
-        self._closest_face_history.append(face_id)
-        if len(self._closest_face_history) > self._history_length:
-            self._closest_face_history.pop(0)
-
-        if len(set(self._closest_face_history)) == 1:
-            return self._closest_face_history[-1] 
-        return None  
+        return max(faces, key=lambda f: f[2] * f[3])
 
     def _init_tracker(self, frame, bbox):
-        self._tracker = cv2.TrackerCSRT_create()
+        self._tracker = cv2.TrackerKCF_create()
         self._tracker.init(frame, bbox)
-        self._tracking_bbox = bbox
+        self.tracking_bbox = bbox
 
     def _update_tracker(self, frame):
         if self._tracker is None:
             return None
         success, bbox = self._tracker.update(frame)
         if success:
-            self._tracking_bbox = tuple(map(int, bbox))
-            return self._tracking_bbox
+            self.tracking_bbox = tuple(map(int, bbox))
+            return self.tracking_bbox
         else:
             self._tracker = None
-            self._tracking_bbox = None
+            self.tracking_bbox = None
             return None
 
-    def _get_eye_images_from_landmarks(self, frame, landmarks):
-        eye_imgs = []
-        h, w, _ = frame.shape
+    def _get_gaze_direction_heuristic(self, eye_roi_gray):
+        if eye_roi_gray is None or eye_roi_gray.size == 0:
+            return "not_forward" 
+            
+        eye_roi_gray = cv2.equalizeHist(eye_roi_gray)
+        _, thresholded_eye = cv2.threshold(eye_roi_gray, 45, 255, cv2.THRESH_BINARY_INV)
+        contours, _ = cv2.findContours(thresholded_eye, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if not contours:
+            return "not_forward"
 
-        for eye_indices in [self._LEFT_EYE, self._RIGHT_EYE]:
-            eye_coords = []
-            for idx in eye_indices:
-                x = int(landmarks.landmark[idx].x * w)
-                y = int(landmarks.landmark[idx].y * h)
-                eye_coords.append((x, y))
+        largest_contour = max(contours, key=cv2.contourArea)
+        M = cv2.moments(largest_contour)
+        
+        if M['m00'] == 0:
+            return "not_forward"
 
-            x_min = max(min(p[0] for p in eye_coords) - 5, 0)
-            x_max = min(max(p[0] for p in eye_coords) + 5, w)
-            y_min = max(min(p[1] for p in eye_coords) - 5, 0)
-            y_max = min(max(p[1] for p in eye_coords) + 5, h)
+        cx = int(M['m10'] / M['m00'])
+        eye_width = eye_roi_gray.shape[1]
+        
+        pos_ratio = cx / eye_width
+        
+        if pos_ratio < 0.40 or pos_ratio > 0.60:
+            return "not_forward"
+        else:
+            return "forward"
 
-            eye_img = frame[y_min:y_max, x_min:x_max]
-            if eye_img.size > 0:
-                eye_img_resized = cv2.resize(eye_img, self._input_shape)
-                eye_imgs.append(eye_img_resized)
-        return eye_imgs
+    def _get_eye_data(self, frame, face_bbox):
+        fx, fy, fw, fh = face_bbox
+        face_roi_color = frame[fy:fy+fh, fx:fx+fw]
+        face_roi_gray = cv2.cvtColor(face_roi_color, cv2.COLOR_BGR2GRAY)
 
-    def _predict(self, eye_img):
+        eyes = self._eye_cascade.detectMultiScale(face_roi_gray, 1.1, 3)
+
+        if len(eyes) < 2:
+            return None
+
+        eyes = sorted(eyes, key=lambda e: e[2] * e[3], reverse=True)[:2]
+        eyes = sorted(eyes, key=lambda e: e[0])
+
+        eye_imgs_color = []
+        eye_imgs_gray = []
+        for (ex, ey, ew, eh) in eyes:
+            eye_roi_color = face_roi_color[ey:ey+eh, ex:ex+ew]
+            eye_roi_gray = face_roi_gray[ey:ey+eh, ex:ex+ew]
+            if eye_roi_color.size > 0:
+                eye_imgs_color.append(eye_roi_color)
+                eye_imgs_gray.append(eye_roi_gray)
+        
+        if len(eye_imgs_color) != 2:
+            return None
+
+        left_eye_resized = cv2.resize(eye_imgs_color[0], self._input_shape)
+        right_eye_resized = cv2.resize(eye_imgs_color[1], self._input_shape)
+        combined_eyes = np.hstack((left_eye_resized, right_eye_resized))
+        model_input = cv2.resize(combined_eyes, self._input_shape)
+        
+        return {
+            "model_input": model_input,
+            "left_eye_gray": eye_imgs_gray[0],
+            "right_eye_gray": eye_imgs_gray[1]
+        }
+
+    def _predict_with_model(self, eye_img):
         input_data = np.expand_dims(eye_img.astype(np.float32) / 255.0, axis=0)
         self._interpreter.set_tensor(self._input_details[0]['index'], input_data)
         self._interpreter.invoke()
         output_data = self._interpreter.get_tensor(self._output_details[0]['index'])
         return self._class_labels[np.argmax(output_data[0])]
 
+    def _reset_gaze_state(self, reason=""):
+        self._start_stare = None
+        self._lookaway_start = None
+        if self._gaze_active:
+            self._gaze_active = False
+            if self._gaze_end_callback:
+                self._gaze_end_callback()
+
     def process_frame(self, frame):
         current_time = time.time()
+        
+        self._frame_counter += 1
+        if self._tracker is not None:
+            self._update_tracker(frame)
 
-        if self._tracker is None:
-            faces = self._get_face_bboxes_and_depths(frame)
-            if not faces:
-                self._closest_face_history.clear()
-                self._start_stare = None
-                self._lookaway_start = None
-                if self._gaze_active:
-                    self._gaze_active = False
-                    if self._gaze_end_callback:
-                        self._gaze_end_callback()
-                return
-
-            closest_idx = self._select_closest_face(faces)
-            stable_face_id = self._update_closest_face_history(closest_idx)
-
-            if stable_face_id is not None:
-                face = faces[stable_face_id]
-                self._init_tracker(frame, face["bbox"])
-                self._closest_face_id = stable_face_id
-                landmarks = face["landmarks"]
+        if self.tracking_bbox is None or self._frame_counter % self._detection_interval == 0:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = self._detect_faces(gray)
+            closest_face = self._select_closest_face(faces) if len(faces) > 0 else None
+            
+            if closest_face is not None:
+                self.tracking_bbox = tuple(closest_face.astype(int))
+                self._init_tracker(frame, self.tracking_bbox)
             else:
-                self._start_stare = None
-                self._lookaway_start = None
-                return
-        else:
-            bbox = self._update_tracker(frame)
-            if bbox is None:
+                self.tracking_bbox = None
                 self._tracker = None
-                self._tracking_bbox = None
-                self._closest_face_history.clear()
-                self._start_stare = None
-                self._lookaway_start = None
-                if self._gaze_active:
-                    self._gaze_active = False
-                    if self._gaze_end_callback:
-                        self._gaze_end_callback()
-                return
-            faces = self._get_face_bboxes_and_depths(frame)
-            landmarks = None
-            min_dist = float('inf')
-            x, y, w_box, h_box = bbox
-            center = (x + w_box / 2, y + h_box / 2)
-            for face in faces:
-                fx, fy, fw, fh = face["bbox"]
-                fcenter = (fx + fw / 2, fy + fh / 2)
-                dist = (center[0] - fcenter[0])**2 + (center[1] - fcenter[1])**2
-                if dist < min_dist:
-                    min_dist = dist
-                    landmarks = face["landmarks"]
-
-            if landmarks is None:
-                self._start_stare = None
-                self._lookaway_start = None
+                self._reset_gaze_state("Face Lost")
+                self.last_known_prediction = "not_forward"
+                # Clear history when face is lost
+                self.prediction_history.clear()
                 return
 
-        eye_imgs = self._get_eye_images_from_landmarks(frame, landmarks)
-
-        if eye_imgs:
-            eye_input = np.hstack(eye_imgs) if len(eye_imgs) == 2 else eye_imgs[0]
-            eye_input = cv2.resize(eye_input, self._input_shape)
-            prediction = self._predict(eye_input)
-
-            if prediction == "forward_look":
-                self._lookaway_start = None
-                if self._start_stare is None:
-                    self._start_stare = current_time
-                elif not self._gaze_active and (current_time - self._start_stare >= self.threshold_time):
-                    self._gaze_active = True
-                    if self._gaze_start_callback:
-                        self._gaze_start_callback()
-            else:
-                if self._gaze_active:
-                    if self._lookaway_start is None:
-                        self._lookaway_start = current_time
-                    elif current_time - self._lookaway_start >= self.lookaway_grace_period:
-                        self._gaze_active = False
-                        self._start_stare = None
-                        self._lookaway_start = None
-                        if self._gaze_end_callback:
-                            self._gaze_end_callback()
+        current_prediction = "not_forward" 
+        if self.tracking_bbox is not None:
+            eye_data = self._get_eye_data(frame, self.tracking_bbox)
+            
+            if eye_data:
+                heuristic_gaze = self._get_gaze_direction_heuristic(eye_data["left_eye_gray"])
+                if heuristic_gaze == "not_forward":
+                    current_prediction = "not_forward"
                 else:
-                    self._start_stare = None
-                    self._lookaway_start = None
-        else:
+                    current_prediction = self._predict_with_model(eye_data["model_input"])
+
+        self.prediction_history.append(current_prediction)
+        
+        stable_prediction = "not_forward"
+        if len(self.prediction_history) == self.prediction_history.maxlen:
+            try:
+                stable_prediction = max(set(self.prediction_history), key=self.prediction_history.count)
+            except ValueError:
+                stable_prediction = "not_forward"
+                
+        self.last_known_prediction = stable_prediction
+
+        is_looking_forward = (stable_prediction == "forward")
+
+        if is_looking_forward:
+            self._lookaway_start = None
+            if self._start_stare is None:
+                self._start_stare = current_time
+            elif not self._gaze_active and (current_time - self._start_stare >= self.threshold_time):
+                self._gaze_active = True
+                if self._gaze_start_callback:
+                    self._gaze_start_callback()
+        else: 
             if self._gaze_active:
                 if self._lookaway_start is None:
                     self._lookaway_start = current_time
                 elif current_time - self._lookaway_start >= self.lookaway_grace_period:
-                    self._gaze_active = False
-                    self._start_stare = None
-                    self._lookaway_start = None
-                    if self._gaze_end_callback:
-                        self._gaze_end_callback()
+                    self._reset_gaze_state("Looked Away")
             else:
                 self._start_stare = None
-                self._lookaway_start = None
 
-    def set_gaze_start_callback(self, callback):
-        self._gaze_start_callback = callback
-    
-    def set_gaze_end_callback(self, callback):
-        self._gaze_end_callback = callback
-
-    def release(self):
-            if self._face_mesh:
-                self._face_mesh.close()
-                self._face_mesh = None
-            self._tracker = None
-            self._tracking_bbox = None
-            self._closest_face_history.clear()
-            self._closest_face_id = None
-            self._gaze_start_callback = None
-            self._gaze_end_callback = None
-            self._input_details = None
-            self._output_details = None
-            self._interpreter = None
-            self._input_shape = None
-            self._class_labels = None
-            self._start_stare = None
-            self._lookaway_start = None
-            self._gaze_active = False
+    def set_gaze_start_callback(self, callback): self._gaze_start_callback = callback
+    def set_gaze_end_callback(self, callback): self._gaze_end_callback = callback
+    def release(self): self._tracker = None
