@@ -3,20 +3,18 @@
 # setup.sh
 # Copyright (C) 2025 stantonik <stantonik@stantonik-mba.local>
 #
-# Distributed under terms of the MIT license.
+# Distributed under terms of the GPLv3 license.
 #
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PARENT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Variables — customize RAM_SIZE_MB, DIR_PATH is set to parent folder of this script
-RAM_SIZE_MB=512
-DIR_PATH="$PARENT_DIR/mnt/ramdisk"  # For example, under parent dir in "mnt/ramdisk"
+RAM_SIZE_MB=64
+DIR_PATH="$SCRIPT_DIR/ramdisk"
 
-MOUNT_SCRIPT="/usr/local/bin/mount_tmpfs.sh"
-SERVICE_FILE="/etc/systemd/system/mount_tmpfs.service"
+MOUNT_SCRIPT="/usr/local/bin/mirrormini.sh"
+SERVICE_FILE="/etc/systemd/system/mirrormini.service"
 
-echo "Parent directory of this script detected as: $PARENT_DIR"
 echo "Mount directory set to: $DIR_PATH"
 
 echo "Creating mount script at $MOUNT_SCRIPT..."
@@ -30,6 +28,8 @@ dir_path="$DIR_PATH"
 mkdir -p "\$dir_path"
 
 mountpoint -q "\$dir_path" || mount -t tmpfs -o size="\${ram_size_mb}M" tmpfs "\$dir_path"
+chown -R $USER:$USER "\$dir_path"
+echo "tmpfs mounted at $DIR_PATH with size of ${RAM_SIZE_MB}M."
 EOF
 
 chmod +x "$MOUNT_SCRIPT"
