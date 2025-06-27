@@ -9,7 +9,6 @@
 This script processes the image and removes the background
 """
 import cv2
-from rembg import remove, new_session
 from PIL import Image, ImageFilter
 import numpy as np
 import io
@@ -26,6 +25,7 @@ def add_black_background(image_with_alpha):
     return black_bg
 
 def remove_background(input_path, output_path):
+    from rembg import remove, new_session
     with open(input_path, "rb") as f:
         input_bytes = f.read()
 

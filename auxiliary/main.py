@@ -1,15 +1,17 @@
 #! /usr/bin/env python3
 # vim:fenc=utf-8
 #
-# Copyright © 2025 mailitruong
+# Copyright © 2025 mailitruong <mailitruong@Mailis-MacBook-Pro.local>
 #
 # Distributed under terms of the MIT license.
 
 """
 This script can:
-1. Fetch images from server (camera + video frame).
+1. Fetch assets from server (camera + AI generated video url).
 2. Generate morphing video using two images.
 3. Send morphing video to the server.
+4. Reverse video.
+5. Concatenate videos
 """
 
 import sys
@@ -18,15 +20,15 @@ import requests
 from time import sleep
 import subprocess
 import image_processing
+import video_processing
 
 # ==== VARIABLES ====
 URL = "http://192.168.11.40:8000"
 TEMP_DIR = "temp"
 TEMP_REMBG_DIR = "temp/temp_rembg"
 CAPTURE_IMG = os.path.join(TEMP_DIR, "capture.jpg")
-VIDEO_FRAME_IMG = os.path.join(TEMP_DIR, "video_frame.jpg")
-CAPTURE_REMBG = os.path.join(TEMP_DIR, "capture_rembg.jpg")
-VIDEO_FRAME_REMBG = os.path.join(TEMP_DIR, "video_frame_rembg.jpg")
+CAPTURE_REMBG = os.path.join(TEMP_REMBG_DIR, "capture_rembg.jpg")
+VIDEO_FRAME_REMBG = os.path.join(TEMP_REMBG_DIR, "video_frame_rembg.jpg")
 ALIGNED_DIR = os.path.join(TEMP_DIR, "aligned_faces")
 OUTPUT_VIDEO = os.path.join(TEMP_DIR, "output.mp4")
 FACE_ALIGN_SCRIPT = "face-movie/face-movie/align.py"
@@ -34,79 +36,80 @@ MORPH_SCRIPT = "face-movie/face-movie/main.py"
 TRANSITION_DUR = 2.0
 PAUSE_DUR = 0.5
 FPS = 25
+VIDEO_REVERSED = os.path.join(TEMP_DIR, "reversed_video.mp4")
+VIDEO_CONCATENATED = os.path.join(TEMP_DIR, "concatenated_video.mp4")
+VIDEO_AI = os.path.join(TEMP_DIR, "video_generated.mp4")
+MORPH_TEMP_DIR = os.path.join(TEMP_DIR, "morph_temp_processed")
+
 
 # ==== FUNCTIONS ====
 
-def fetch_images():
-    get_video_frame_url = f"{URL}/get_video_frame_for_morph"
+
+def fetch_assets():
     get_camera_frame_url = f"{URL}/get_camera_capture"
+    get_video_url = f"{URL}/get_video_url"
 
     print("[INFO] Requesting camera image...")
-    response = requests.post(get_camera_frame_url)
-    if response.ok and response.headers.get("Content-Type", "").startswith("image/"):
-        with open(CAPTURE_IMG, 'wb') as f:
-            f.write(response.content)
-        print(f"[SUCCESS] Image saved to {CAPTURE_IMG}")
+    try:
+        response = requests.post(get_camera_frame_url)
+        response.raise_for_status() 
+        if response.headers.get("Content-Type", "").startswith("image/"):
+            with open(CAPTURE_IMG, 'wb') as f:
+                f.write(response.content)
+            print(f"[SUCCESS] Image saved to {CAPTURE_IMG}")
+        else:
+            print("[ERROR] Server did not return an image for camera capture.")
+            return False
+    except requests.RequestException as e:
+        print(f"[ERROR] Failed to download camera image: {e}")
+        return False
+
+    print("[INFO] Requesting video url...")
+    try:
+        response = requests.post(get_video_url, timeout=10)
+        response.raise_for_status()
+        video_url = response.text.strip()
+        print(f"[SUCCESS] Video URL retrieved: {video_url}")
+    except requests.RequestException as e:
+        print(f"[ERROR] Request to get video URL failed: {e}")
+        return False
+
+    if not video_processing.download_video(video_url, VIDEO_AI):
+        print("[ERROR] Video download failed. Aborting.")
+        return False
+
+    if not video_processing.get_first_frame(VIDEO_AI, VIDEO_FRAME_REMBG):
+        print("[ERROR] Frame extraction failed. Aborting.")
+        return False
+
+    print("\n[COMPLETE] All assets fetched and prepared successfully.")
+    return True
+
+
+def generate_morph_wrapper():
+    """
+    A wrapper to call the specialized morph generation process.
+    """
+    print("[INFO] Preparing to generate specialized morph.")
+    
+    success = video_processing.generate_morph_specialized(
+        images_path=TEMP_REMBG_DIR,
+        capture_rembg_path=CAPTURE_REMBG,
+        video_frame_rembg_path=VIDEO_FRAME_REMBG,
+        output_video_path=OUTPUT_VIDEO,
+        align_script_path=FACE_ALIGN_SCRIPT,
+        morph_script_path=MORPH_SCRIPT,
+        aligned_dir=ALIGNED_DIR,
+        temp_dir=MORPH_TEMP_DIR,
+        transition_dur=TRANSITION_DUR,
+        pause_dur=PAUSE_DUR,
+        fps=FPS
+    )
+    
+    if success:
+        print("[INFO] Morph generation process finished successfully in main.")
     else:
-        print(f"[ERROR] Failed to download camera image: {response.status_code}\n{response.text}")
-        return
-
-    print(f"[INFO] Waiting for video frame from {get_video_frame_url}...")
-    while True:
-        try:
-            response = requests.post(get_video_frame_url, timeout=5)
-            if response.ok and response.headers.get("Content-Type", "").startswith("image/"):
-                with open(VIDEO_FRAME_IMG, 'wb') as f:
-                    f.write(response.content)
-                print(f"[SUCCESS] Video frame saved to {VIDEO_FRAME_IMG}")
-                break
-            else:
-                print("[INFO] Server not ready, retrying...")
-                sleep(2)
-        except requests.RequestException as e:
-            print(f"[ERROR] Request failed: {e}, retrying...")
-            sleep(2)
-
-
-def generate_morph(a_path, b_path):
-    print("[INFO] Generating morphing video with", a_path, "and", b_path)
-
-    if not os.path.isfile(a_path) or not os.path.isfile(b_path):
-        print("[ERROR] One or both image paths are invalid.")
-        return
-
-    os.makedirs(ALIGNED_DIR, exist_ok=True)
-    os.makedirs(TEMP_REMBG_DIR, exist_ok=True)
-
-    try:
-        print("[INFO] Aligning face images...")
-        subprocess.run([
-            "python", FACE_ALIGN_SCRIPT,
-            "-images", TEMP_REMBG_DIR,
-            "-target", a_path,
-            "-overlay",
-            "-outdir", ALIGNED_DIR
-        ], check=True)
-        print("[SUCCESS] Face alignment completed.")
-    except subprocess.CalledProcessError as e:
-        print(f"[ERROR] Face alignment failed: {e}")
-        return
-
-    try:
-        print("[INFO] Generating morphing video...")
-        subprocess.run([
-            "python", MORPH_SCRIPT,
-            "-morph",
-            "-images", ALIGNED_DIR,
-            "-td", str(TRANSITION_DUR),
-            "-pd", str(PAUSE_DUR),
-            "-fps", str(FPS),
-            "-out", OUTPUT_VIDEO
-        ], check=True)
-        print(f"[SUCCESS] Morphing video created: {OUTPUT_VIDEO}")
-    except subprocess.CalledProcessError as e:
-        print(f"[ERROR] Morphing process failed: {e}")
-        return
+        print("[ERROR] Morph generation process failed in main.")
 
 
 def send_video(video_path):
@@ -140,19 +143,69 @@ def remove_background_for_images(image_paths):
         print("[SUCCESS] Background removed successfully!")
 
 
+def reverse_video(video_path):
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    print(f"[INFO] Starting video reversal for: {video_path}")
+    video_processing.reverse_video_from_path(video_path, VIDEO_REVERSED)
+
+
+def concatenate_videos(videos_list):
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    if all(os.path.exists(v) for v in videos_list):
+        print(f"[INFO] Starting video concatenation for: {', '.join(videos_list)}")
+        video_processing.concatenate_videos_ffmpeg(videos_list, VIDEO_CONCATENATED)
+    else:
+        print("[ERROR] One or more input video files not found.")
+
+
+def run_full_pipeline():
+    print("[INFO] Running full pipeline")
+    
+    if not fetch_assets():
+        print("[ERROR] Could not fetch assets.")
+        return
+    print("[SUCCESS] Step 1/7: Fetching assets complete.")
+
+    remove_background_for_images([CAPTURE_IMG]) 
+    print("[SUCCESS] Step 2/7: Background removal complete.")
+
+    generate_morph_wrapper()    
+    print("[SUCCESS] Step 3/7: Morphing video generation complete.")
+    
+    send_video(OUTPUT_VIDEO)
+    print("[SUCCESS] Step 4/7: Morphing video generation sent.")
+
+    reverse_video(VIDEO_AI)
+    print("[SUCCESS] Step 5/7: Video reversal complete.")
+
+    concatenate_videos([VIDEO_AI, VIDEO_REVERSED])
+    print("[SUCCESS] Step 6/7: Video concatenation complete.")
+
+    send_video(VIDEO_CONCATENATED)
+    print("[SUCCESS] Step 7/7: Final video sent.")
+    print("[SUCCESS] PIPELINE FINISHED SUCCESSFULLY")
+
+
 # ==== MAIN ====
+
 
 def main():
     os.makedirs(TEMP_DIR, exist_ok=True)
 
     if len(sys.argv) == 1:
-        fetch_images()
+        run_full_pipeline()
 
+    elif sys.argv[1] == "fetch":
+        fetch_assets()
+    
     elif sys.argv[1] == "generate_morph":
-        if len(sys.argv) == 4:
-            generate_morph(sys.argv[2], sys.argv[3])
+        required_files = [CAPTURE_REMBG, VIDEO_FRAME_REMBG]
+
+        if not all(os.path.exists(p) for p in required_files):
+            print("[ERROR] Required files for morphing not found. (pictures or shape_predictor required for face-movie)")
+            print("Please run 'fetch_assets' and 'remove_background' first.")
         else:
-            generate_morph(CAPTURE_REMBG, VIDEO_FRAME_REMBG)
+            generate_morph_wrapper()
 
     elif sys.argv[1] == "send_video":
         if len(sys.argv) == 3:
@@ -164,14 +217,29 @@ def main():
         if len(sys.argv) >= 3:
             remove_background_for_images(sys.argv[2:])
         else:
-            remove_background_for_images([CAPTURE_IMG, VIDEO_FRAME_IMG])
+            remove_background_for_images([CAPTURE_IMG])
+
+    elif sys.argv[1] == "reverse_video":
+        if len(sys.argv) == 3:
+            reverse_video(sys.argv[2])
+        else:
+            reverse_video(VIDEO_AI)
+
+    elif sys.argv[1] == "concatenate_videos":
+        if len(sys.argv) >= 4:
+            concatenate_videos(sys.argv[2:])
+        else:
+            concatenate_videos([VIDEO_AI, VIDEO_REVERSED])
 
     else:
         print("Usage:")
-        print("  python main.py")
-        print("  python main.py generate_morph <PATH_IMG_A> <PATH_IMAGE_B>")
-        print("  python main.py send_video <PATH_VIDEO>")
+        print("  python main.py (runs full pipeline)")
+        print("  python main.py fetch (fetches assets from server)")
         print("  python main.py remove_background <PATH_IMG_1> <PATH_IMG_2> ...")
+        print("  python main.py generate_morph")
+        print("  python main.py reverse_video <PATH_VIDEO>")
+        print("  python main.py concatenate_videos <PATH_VIDEO_1> <PATH_VIDEO_2> ...")
+        print("  python main.py send_video <PATH_VIDEO>")
 
 
 if __name__ == "__main__":
