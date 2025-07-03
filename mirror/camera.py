@@ -5,24 +5,7 @@
 #
 # Distributed under terms of the MIT license.
 
-import cv2
-
-# ========== MACOS: Simulate picam2.capture_array() ==========
-def init_webcam():
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-    def get_frame():
-        ret, frame = cap.read()
-        if not ret:
-            raise RuntimeError("Failed to capture frame from webcam.")
-        return frame
-
-    return cap, get_frame
-
-# ========== RASPBERRY PI: Real picamera2 (for later) ==========
-def init_picam2():
+try:
     from picamera2 import Picamera2
 
     picam2 = Picamera2()
@@ -34,4 +17,21 @@ def init_picam2():
     def get_frame():
         return picam2.capture_array()
 
-    return picam2, get_frame
+    def release():
+        pass
+
+except:
+    import cv2
+
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+    def get_frame():
+        ret, frame = cap.read()
+        if not ret:
+            raise RuntimeError("Failed to capture frame from webcam.")
+        return frame
+    def release():
+        cap.release()
+

@@ -6,13 +6,10 @@
 # Distributed under terms of the GLPv3 license.
 
 import cv2
-import camera as cam
+import camera
 import http_server
 import shared
 from face_recognition import LightweightFaceDetector
-
-USE_WEBCAM = True  # Set False when running on Raspberry Pi
-camera, get_frame = cam.init_webcam() if USE_WEBCAM else cam.init_picam2()
 
 MODEL_DIR = "models"
 
@@ -31,7 +28,7 @@ def run():
 
     try:
         while True:
-            frame = get_frame()
+            frame = camera.get_frame()
 
             face_detector.process_frame(frame)
 
@@ -45,8 +42,7 @@ def run():
         print("Shutting down...")
 
     finally:
-        if USE_WEBCAM:
-            camera.release()
+        camera.release()
         cv2.destroyAllWindows()
         http_server.stop()
 
