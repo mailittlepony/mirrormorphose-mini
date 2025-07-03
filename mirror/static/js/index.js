@@ -19,7 +19,7 @@ function on_load() {
         resultDiv.textContent = "Uploading...";
 
         try {
-            const response = await fetch('/upload_user_photo', {
+            const response = await fetch('/upload_media', {
                 method: 'POST',
                 body: formData,
             });

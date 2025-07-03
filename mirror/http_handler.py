@@ -14,6 +14,10 @@ import os
 import api
 import shared
 from shared import STATIC_DIR, RAM_DISK
+from dotenv import load_dotenv
+
+load_dotenv()
+auth_token = os.getenv("AUTH_TOKEN")
 
 class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
 # Override
@@ -31,10 +35,9 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
             
     def do_POST(self):
         routes = {
-            "/upload_user_photo": self._handle_upload_user_photo,
-            "/upload_morph_video": self._handle_upload_morph_video,
-            "/get_video_frame_for_morph": self._handle_get_video_frame_for_morph,
+            "/upload_media": self._handle_upload_media,
             "/get_camera_capture": self._handle_get_camera_capture,
+            "/get_video_url": self._handle_get_video_url,
         }
         handler = routes.get(self.path)
         if handler:
@@ -84,107 +87,76 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
     """
     POST Handlers
     """
-    def _handle_upload_user_photo(self):
-        # Parse the multipart form data
+
+    def _handle_upload_media(self):
+        content_type = self.headers.get('Content-Type')
+        if not content_type or 'multipart/form-data' not in content_type:
+            self._send_response_str(400, "Content-Type must be multipart/form-data")
+            return
+
+        auth_header = self.headers.get("Authorization")
+
+        # Parse form-data
         form = FieldStorage(
             fp=self.rfile,
             headers=self.headers,
             environ={
                 'REQUEST_METHOD': 'POST',
-                'CONTENT_TYPE': self.headers.get('Content-Type'),
+                'CONTENT_TYPE': content_type,
             }
         )
 
-        if 'photo' not in form:
-            self._send_response_str(400, "Missing 'photo' field.")
+        file_item = form['file']
+        if not file_item.filename:
+            self._send_response_str(400, "No file uploaded")
             return
 
-        fileitem = form['photo']
-        if not fileitem.file or not fileitem.filename:
-            self._send_response_str(400, "No file uploaded.")
-            return
-
-        if fileitem.type not in [ "image/jpeg", "image/png" ]:
-            self._send_response_str(415, f"Unsupported media type: {fileitem.type}")
-            return
+        filename = os.path.basename(file_item.filename)
+        file_ext = os.path.splitext(filename)[1].lower()
 
         try:
-            with open(f"{RAM_DISK}/user_photo.jpg", 'wb') as out_file:
+            isadmin =  auth_header == f"Bearer {auth_token}"
+
+            if file_ext.lower() in [".jpg", ".jpeg", ".png"]:
+                response = f"Child picture uploaded: {filename}"
+                filename = f"user_photo{file_ext}"
+                api.runway_generate_video(file_item)
+            elif filename == shared.MORPH_VIDEO_FILE:
+                if not isadmin:
+                    raise Exception("Access forbidden.")
+                response = f"Morph video uploaded: {filename}"
+            elif filename == shared.AI_VIDEO_FILE:
+                if not isadmin:
+                    raise Exception(f"Forbidden access {auth_token}")
+                response = f"Loopable Runway video uploaded: {filename}"
+            else:
+                raise Exception("Unknown uploaded item.")
+
+            with open(f"{RAM_DISK}/{filename}", "wb") as f:
                 while True:
-                    chunk = fileitem.file.read(8192)
+                    chunk = file_item.file.read(8192)
                     if not chunk:
                         break
-                    out_file.write(chunk)
-                    api.runway_generate_video(fileitem)
-            self._send_response_str(200, f"Uploaded successfully. Sent to Runway API.")
+                    f.write(chunk)
+
+            self._send_response_str(200, response)
         except Exception as e:
-            self._send_response_str(500, f"Error saving file: {e}")
+            self._send_response_str(403, f'{e}')
 
-    def _handle_upload_morph_video(self):
-        content_type = self.headers.get('Content-Type', '')
-        # Validate content type
-        if not content_type.startswith("video/"):
-            self._send_response_str(415, "Unsupported Media Type. Expected type starting with 'video/'.")
-            return
+    def _handle_get_video_url(self):
+        video_url = shared.shared_data.get("generated_video_url")
 
-        content_length = int(self.headers.get('Content-Length', 0))
-        if content_length == 0:
-            self._send_response_str(400, "Empty request body.")
-            return
-
-        try:
-            file_data = self.rfile.read(content_length)
-
-            os.makedirs("temp", exist_ok=True)
-            with open(f"{RAM_DISK}/morph_video.mp4", "wb") as f:
-                f.write(file_data)
-
-            self._send_response_str(200, "Face morph video uploaded successfully.")
-
-        except Exception as e:
-            self._send_response_str(500, f"Server error: {e}")
-
-    def _handle_get_video_frame_for_morph(self):
-        try:
-            with shared.lock:
-                task_status = shared.shared_data.get("runway_task_status")
-
-            if task_status == 1:
-                self._send_response_str(404, "Runway video not downloaded yet.")
-                return
-
-            video_path = f"{RAM_DISK}/generated_video.mp4"
-            if not os.path.isfile(video_path):
-                self._send_response_str(404, "Video file not found.")
-                return
-
-            cap = cv2.VideoCapture(video_path)
-            if not cap.isOpened():
-                self._send_response_str(500, "Failed to open video file.")
-                return
-
-            target_frame_index = 0
-            cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame_index)
-
-            success, frame = cap.read()
-            cap.release()
-
-            if not success or frame is None:
-                self._send_response_str(500, "Failed to read the video frame.")
-                return
-
-            success, jpeg = cv2.imencode(".jpg", frame)
-            if not success:
-                self._send_response_str(500, "Failed to encode frame as JPEG.")
-                return
-
-            self._send_response(200, jpeg.tobytes(), content_type="image/jpeg")
-
-        except Exception as e:
-            self._send_response_str(500, f"Error: {str(e)}")
-
+        if video_url:
+            self._send_response_str(200, video_url) 
+        else:
+            self._send_response_str(400, "Not ready yet.")
 
     def _handle_get_camera_capture(self):
+        auth_header = self.headers.get("Authorization")
+        if auth_header != f"Bearer {auth_token}":
+            self._send_response_str(403, f"Forbidden access {auth_token}")
+            return
+
         try:
             with shared.lock:
                 frame = shared.shared_data.get("last_camera_frame")

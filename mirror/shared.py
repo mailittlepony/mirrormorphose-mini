@@ -11,10 +11,14 @@ RAM_DISK = "ramdisk"
 TEMP_DIR = "temp"
 STATIC_DIR = "static"
 
+# Files path
+MORPH_VIDEO_PATH = f"{RAM_DISK}/morph_video.mp4"
+AI_VIDEO_PATH = f"{RAM_DISK}/concatenated_video.mp4"
+
 shared_data = {
     "user_photo": None,
     "last_camera_frame": None,
-    "runway_task_status": 0
+    "generated_video_url": None
 }
 
 lock = Lock()

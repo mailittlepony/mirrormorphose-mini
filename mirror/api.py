@@ -6,13 +6,12 @@
 # Distributed under terms of the MIT license.
 
 import threading
+import shared
 from runwayml import RunwayML, TaskFailedError
-from dotenv import load_dotenv
 from os import getenv
 from base64 import b64encode
-import requests
 from shared import RAM_DISK
-import shared
+from dotenv import load_dotenv
 
 load_dotenv()
 api_key = getenv("RUNWAYML_API_SECRET")
@@ -25,7 +24,7 @@ def runway_generate_video(img):
 
     if test_video:
         with shared.lock:
-            shared.shared_data["runway_task_status"] = 0 
+            shared.shared_data["generated_video_url"] = "https://www.youtube.com" 
         return
 
     def start_task():
@@ -34,7 +33,7 @@ def runway_generate_video(img):
             data_uri = f"data:image/jpeg;base64,{base64_jpg}"
 
             with shared.lock:
-                shared.shared_data["runway_task_status"] = 1
+                shared.shared_data["generated_video_url"] = None
 
             task = runway_client.image_to_video.create(
                 model='gen4_turbo',
@@ -48,17 +47,8 @@ def runway_generate_video(img):
             if not video_url.startswith("http"):
                 raise RuntimeError("Invalid URL in task output")
 
-            # Download video with timeout
-            response = requests.get(video_url, stream=True, timeout=20)
-            response.raise_for_status()
-
-            with open(video_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-    
             with shared.lock:
-                shared.shared_data["runway_task_status"] = 0
+                shared.shared_data["generated_video_url"] = video_url
 
         except TaskFailedError as e:
             print(f"Error : {e.task_details}")
