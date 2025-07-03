@@ -4,3 +4,4 @@ tflite-runtime
 runwayml
 python-dotenv
 requests
+pydbus

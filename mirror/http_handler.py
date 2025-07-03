@@ -8,13 +8,10 @@
 from urllib.parse import unquote
 from http.server import BaseHTTPRequestHandler
 from cgi import FieldStorage
-import cv2
 from mimetypes import guess_type
-import os
-import api
-import shared
 from shared import STATIC_DIR, RAM_DISK
 from dotenv import load_dotenv
+import cv2, os, api, shared, display
 
 load_dotenv()
 auth_token = os.getenv("AUTH_TOKEN")
@@ -38,6 +35,9 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
             "/upload_media": self._handle_upload_media,
             "/get_camera_capture": self._handle_get_camera_capture,
             "/get_video_url": self._handle_get_video_url,
+            "/load_videos": self._handle_load_videos,
+            "/start_eye_contact": self._handle_start_eye_contact,
+            "/stop_eye_contact": self._handle_stop_eye_contact,
         }
         handler = routes.get(self.path)
         if handler:
@@ -172,6 +172,41 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
 
         except Exception as e:
             self._send_response_str(500, f'Error: {str(e)}')
+
+    def _handle_load_video(self):
+        auth_header = self.headers.get("Authorization")
+        if auth_header != f"Bearer {auth_token}":
+            self._send_response_str(403, f"Forbidden access {auth_token}")
+            return
+        try:
+            display.load_videos()
+            self._send_response_str(200)
+        except Exception as e:
+            self._send_response_str(500, f"Error: {e}")
+
+    def _handle_start_eye_contact(self):
+        auth_header = self.headers.get("Authorization")
+        if auth_header != f"Bearer {auth_token}":
+            self._send_response_str(403, f"Forbidden access {auth_token}")
+            return
+
+        try:
+            display.play()
+            self._send_response_str(200)
+        except Exception as e:
+            self._send_response_str(500, f"Error: {e}")
+
+    def _handle_stop_eye_contact(self):
+        auth_header = self.headers.get("Authorization")
+        if auth_header != f"Bearer {auth_token}":
+            self._send_response_str(403, f"Forbidden access {auth_token}")
+            return
+
+        try:
+            display.stop()
+            self._send_response_str(200)
+        except Exception as e:
+            self._send_response_str(500, f"Error: {e}")
 
 # Helpers
     def _send_response_str(self, code, content=""):
