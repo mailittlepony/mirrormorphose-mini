@@ -121,11 +121,11 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
                 response = f"Child picture uploaded: {filename}"
                 filename = f"user_photo{file_ext}"
                 api.runway_generate_video(file_item)
-            elif filename == shared.MORPH_VIDEO_PATH:
+            elif filename == os.path.basename(shared.MORPH_VIDEO_PATH):
                 if not isadmin:
                     raise Exception("Access forbidden.")
                 response = f"Morph video uploaded: {filename}"
-            elif filename == shared.AI_VIDEO_PATH:
+            elif filename == os.path.basename(shared.AI_VIDEO_PATH):
                 if not isadmin:
                     raise Exception(f"Forbidden access {auth_token}")
                 response = f"Loopable Runway video uploaded: {filename}"
