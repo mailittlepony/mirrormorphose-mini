@@ -32,25 +32,25 @@ def init() -> None:
         raise OverlayError("Failed to initialize overlay.")
 
 
-def overlay_start_fade_in(duration_ms: int, step: int) -> None:
+def start_fade_in(duration_ms: int, step: int) -> None:
     """Start a fade-in effect."""
     if lib.overlay_start_fade_in(duration_ms, step) != 0:
         raise OverlayError("Fade-in failed.")
 
 
-def overlay_start_fade_out(duration_ms: int, step: int) -> None:
+def start_fade_out(duration_ms: int, step: int) -> None:
     """Start a fade-out effect."""
     if lib.overlay_start_fade_out(duration_ms, step) != 0:
         raise OverlayError("Fade-out failed.")
 
 
-def overlay_refresh() -> None:
+def refresh() -> None:
     """Poll"""
     if lib.overlay_refresh() != 0:
         raise OverlayError("Overlay refresh failed.")
 
 
-def overlay_free() -> None:
+def free() -> None:
     """Free overlay resources."""
     if lib.overlay_free() != 0:
         raise OverlayError("Failed to free overlay resources.")

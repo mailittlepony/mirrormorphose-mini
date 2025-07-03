@@ -2,5 +2,5 @@
 	path = auxiliary/face-movie
 	url = https://github.com/andrewdcampbell/face-movie.git
 [submodule "mirror/lib/overlayx/lib/stb"]
-	path = mirror/lib/overlayx/lib/stb
+	path = mirror/overlayx/lib/stb
 	url = https://github.com/nothings/stb.git
