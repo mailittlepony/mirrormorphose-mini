@@ -35,8 +35,10 @@ def _get_dbus_interface(proc):
                 continue
     return None, None
 
-def _goto_position_ms(video, timestamp):
-    pass
+def _goto_position_ms(video, timestamp_ms):
+    current_pos = video[1].Get('org.mpris.MediaPlayer2.Player', 'Position')
+    offset = timestamp_ms * 1000 - current_pos
+    video[0].Seek(dbus.Int64(offset))
 
 def _set_layer(video, layer):
     props = video[1]
@@ -45,12 +47,12 @@ def _set_layer(video, layer):
 def _start_omxplayer(video_path, layer):
     cmd = [
         "omxplayer"
-        "--aspect-mode stretch",
+        "--aspect-mode", "stretch",
         "--no-osd",
         "--no-keys"
         "--loop"
         f"--layer={layer}",
-        "-o hdmi",
+        "-o", "hdmi",
         video_path
     ]
 
@@ -61,21 +63,7 @@ def _start_omxplayer(video_path, layer):
 
     return (interface, props)
 
-def init():
-    global morph_video, ai_video, morph_video_duration, ai_video_duration
-    overlayx.init()
-    morph_video = _start_omxplayer(shared.MORPH_VIDEO_PATH, layer=1)
-    morph_video_duration = morph_video[1].Get('org.mpris.MediaPlayer2.Player', 'Duration')
-    ai_video = _start_omxplayer(shared.AI_VIDEO_PATH, layer=0)
-    ai_video_duration = ai_video[1].Get('org.mpris.MediaPlayer2.Player', 'Duration')
-
-def play():
-    threading.Thread(overlayx.start_fade_in(fade_delay_ms, 5), daemon=True).start()
-    _goto_position_ms(morph_video, 0)
-    _set_layer(morph_video, 1)
-    morph_video[0].Play()
-
-def check_switch():
+def _monitor_morph():
     if (morph_video[1].Get('org.mpris.MediaPlayer2.Player', 'Position') >= morph_video_duration - 10):
         _goto_position_ms(ai_video, 0)
         ai_video[0].Play()
@@ -83,12 +71,27 @@ def check_switch():
         _set_layer(ai_video, 1)
         morph_video[0].Pause()
 
+def init():
+    global monitor_thread, morph_video, ai_video, morph_video_duration, ai_video_duration
+    overlayx.init()
+    morph_video = _start_omxplayer(shared.MORPH_VIDEO_PATH, layer=1)
+    morph_video_duration = morph_video[1].Get('org.mpris.MediaPlayer2.Player', 'Duration')
+    ai_video = _start_omxplayer(shared.AI_VIDEO_PATH, layer=0)
+    ai_video_duration = ai_video[1].Get('org.mpris.MediaPlayer2.Player', 'Duration')
+
+    threading.Thread(target=_monitor_morph, daemon=True).start()
+
+def play():
+    threading.Thread(target=overlayx.start_fade_in, args=(fade_delay_ms, 5), daemon=True).start()
+    _goto_position_ms(morph_video, 0)
+    _set_layer(morph_video, 1)
+    morph_video[0].Play()
+
 def stop():
-    threading.Thread(overlayx.start_fade_out(fade_delay_ms, 5), daemon=True).start()
+    threading.Thread(target=overlayx.start_fade_out, args=(fade_delay_ms, 5), daemon=True).start()
     ai_video[0].Pause()
     morph_video[0].Pause()
 
 def free():
     overlayx.free()
 
-# "omxplayer --win "0 0 1080 1920" --aspect-mode stretch --no-osd -o hdmi stream.h264"
