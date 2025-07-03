@@ -8,7 +8,7 @@
 import ctypes
 from os import path
 
-lib = ctypes.CDLL(path.abspath("./liboverlayx.so"))
+lib = ctypes.CDLL(path.join(path.dirname(__file__), "liboverlayx.so"))
 
 lib.overlay_init.restype = ctypes.c_int
 lib.overlay_free.restype = ctypes.c_int
@@ -18,8 +18,6 @@ lib.overlay_start_fade_in.restype = ctypes.c_int
 
 lib.overlay_start_fade_out.argtypes = [ctypes.c_int, ctypes.c_int]
 lib.overlay_start_fade_out.restype = ctypes.c_int
-
-lib.overlay_refresh.restype = ctypes.c_int
 
 
 class OverlayError(Exception):
@@ -42,13 +40,6 @@ def start_fade_out(duration_ms: int, step: int) -> None:
     """Start a fade-out effect."""
     if lib.overlay_start_fade_out(duration_ms, step) != 0:
         raise OverlayError("Fade-out failed.")
-
-
-def refresh() -> None:
-    """Poll"""
-    if lib.overlay_refresh() != 0:
-        raise OverlayError("Overlay refresh failed.")
-
 
 def free() -> None:
     """Free overlay resources."""

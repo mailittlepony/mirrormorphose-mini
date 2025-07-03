@@ -37,8 +37,6 @@ def run():
 
             face_detector.process_frame(frame)
 
-            display.check_switch()
-
             with shared.lock:
                 shared.shared_data["last_camera_frame"] = frame
 
