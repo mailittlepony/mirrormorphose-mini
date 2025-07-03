@@ -21,16 +21,23 @@ from time import sleep
 import subprocess
 import image_processing
 import video_processing
+from dotenv import load_dotenv
+
+load_dotenv()
+auth_token = os.getenv("AUTH_TOKEN")
+
 
 # ==== VARIABLES ====
-URL = "http://192.168.11.40:8000"
+
+
+URL = "http://10.104.96.184:8000"
 TEMP_DIR = "temp"
 TEMP_REMBG_DIR = "temp/temp_rembg"
 CAPTURE_IMG = os.path.join(TEMP_DIR, "capture.jpg")
 CAPTURE_REMBG = os.path.join(TEMP_REMBG_DIR, "capture_rembg.jpg")
 VIDEO_FRAME_REMBG = os.path.join(TEMP_REMBG_DIR, "video_frame_rembg.jpg")
 ALIGNED_DIR = os.path.join(TEMP_DIR, "aligned_faces")
-OUTPUT_VIDEO = os.path.join(TEMP_DIR, "output.mp4")
+OUTPUT_VIDEO = os.path.join(TEMP_DIR, "morph_video.mp4")
 FACE_ALIGN_SCRIPT = "face-movie/face-movie/align.py"
 MORPH_SCRIPT = "face-movie/face-movie/main.py"
 TRANSITION_DUR = 2.0
@@ -51,7 +58,10 @@ def fetch_assets():
 
     print("[INFO] Requesting camera image...")
     try:
-        response = requests.post(get_camera_frame_url)
+        headers = {
+            'Authorization': f'Bearer {auth_token}'
+        }
+        response = requests.post(get_camera_frame_url, headers=headers)
         response.raise_for_status() 
         if response.headers.get("Content-Type", "").startswith("image/"):
             with open(CAPTURE_IMG, 'wb') as f:
@@ -65,14 +75,16 @@ def fetch_assets():
         return False
 
     print("[INFO] Requesting video url...")
-    try:
-        response = requests.post(get_video_url, timeout=10)
-        response.raise_for_status()
-        video_url = response.text.strip()
-        print(f"[SUCCESS] Video URL retrieved: {video_url}")
-    except requests.RequestException as e:
-        print(f"[ERROR] Request to get video URL failed: {e}")
-        return False
+    while True:
+        try:
+            response = requests.post(get_video_url, timeout=10)
+            response.raise_for_status()
+            video_url = response.text.strip()
+            print(f"[SUCCESS] Video URL retrieved: {video_url}")
+            break
+        except requests.RequestException as e:
+            print(f"[ERROR] Request to get video URL failed: {e}")
+            return False
 
     if not video_processing.download_video(video_url, VIDEO_AI):
         print("[ERROR] Video download failed. Aborting.")
@@ -113,23 +125,27 @@ def generate_morph_wrapper():
 
 
 def send_video(video_path):
-    send_morph_url = f"{URL}/upload_morph_video"
+    send_media_url = f"{URL}/upload_media"
 
     if not os.path.isfile(video_path):
         print(f"[ERROR] File '{video_path}' does not exist.")
         return
 
+    filename = os.path.basename(video_path)
+
     with open(video_path, 'rb') as f:
-        file = f.read()
-        headers = {
-            'Content-Type': 'video/mp4',
-            'Accept': 'application/json'
+        files = {
+            'file': (filename, f, 'video/mp4')
         }
-        print("[INFO] Sending morph video to server...")
-        response = requests.post(send_morph_url, headers=headers, data=file)
+        headers = {
+            'Authorization': f'Bearer {auth_token}'
+        }
+
+        print("[INFO] Sending video to server...")
+        response = requests.post(send_media_url, files=files, headers=headers)
 
     if response.ok:
-        print("[SUCCESS] Morphing video sent successfully!")
+        print("[SUCCESS] Video sent successfully!")
     else:
         print(f"[ERROR] Failed to send video: {response.status_code}\n{response.text}")
 
@@ -212,6 +228,7 @@ def main():
             send_video(sys.argv[2])
         else:
             send_video(OUTPUT_VIDEO)
+            send_video(VIDEO_CONCATENATED)
 
     elif sys.argv[1] == "remove_background":
         if len(sys.argv) >= 3:
