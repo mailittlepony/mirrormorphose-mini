@@ -173,7 +173,7 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._send_response_str(500, f'Error: {str(e)}')
 
-    def _handle_load_video(self):
+    def _handle_load_videos(self):
         auth_header = self.headers.get("Authorization")
         if auth_header != f"Bearer {auth_token}":
             self._send_response_str(403, f"Forbidden access {auth_token}")
