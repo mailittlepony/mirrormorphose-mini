@@ -10,6 +10,7 @@ from os import path
 
 lib = ctypes.CDLL(path.join(path.dirname(__file__), "liboverlayx.so"))
 
+lib.overlay_init.argtypes = [ctypes.c_char_p]
 lib.overlay_init.restype = ctypes.c_int
 lib.overlay_free.restype = ctypes.c_int
 
@@ -24,9 +25,9 @@ class OverlayError(Exception):
     pass
 
 
-def init() -> None:
+def init(vignette_path) -> None:
     """Initialize the overlay system."""
-    if lib.overlay_init() != 0:
+    if lib.overlay_init(vignette_path.encode()) != 0:
         raise OverlayError("Failed to initialize overlay.")
 
 
