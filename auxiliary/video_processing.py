@@ -14,7 +14,8 @@ import os
 import requests
 import cv2
 import numpy as np
-
+import json
+import shutil
 
 def get_first_frame(video_path, output_image_path):
     if not os.path.exists(video_path):
@@ -118,6 +119,58 @@ def concatenate_videos_ffmpeg(video_list, output_path, temp_list_file="mylist.tx
         if os.path.exists(temp_list_file):
             os.remove(temp_list_file)
             print(f"[INFO] Removed temporary list file: {temp_list_file}")
+
+
+def add_vignette(input_video: str, output_video: str, vignette_png: str):
+    for f in [input_video, vignette_png]:
+        if not os.path.exists(f):
+            raise FileNotFoundError(f"Input file not found: {f}")
+
+    print(f"Probing video dimensions for: {input_video}")
+    ffprobe_cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "json",
+        input_video
+    ]
+    
+    try:
+        result = subprocess.run(ffprobe_cmd, capture_output=True, text=True, check=True)
+        video_info = json.loads(result.stdout)
+        
+        if "streams" not in video_info or not video_info["streams"]:
+             raise ValueError("Could not parse video stream information.")
+             
+        dims = video_info["streams"][0]
+        width = dims['width']
+        height = dims['height']
+        print(f"Detected video dimensions: {width}x{height}")
+
+    except subprocess.CalledProcessError as e:
+        raise FFmpegError(f"ffprobe failed to get video dimensions:\n{e.stderr}")
+    except (json.JSONDecodeError, KeyError, IndexError):
+        raise ValueError(f"Could not parse ffprobe output for video dimensions.")
+
+    print(f"Applying vignette '{vignette_png}' to '{input_video}'...")
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-i", input_video,     
+        "-i", vignette_png,     
+        "-filter_complex", f"[1:v]scale={width}:{height}[vignette_scaled];[0:v][vignette_scaled]overlay",
+        "-c:a", "copy",         
+        "-y",                    
+        output_video
+    ]
+
+    try:
+        subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)
+        print(f"Successfully created vignetted video at: {output_video}")
+    except subprocess.CalledProcessError as e:
+        raise FFmpegError(f"ffmpeg command failed.\n"
+                          f"Command: {' '.join(e.cmd)}\n"
+                          f"ffmpeg stderr:\n{e.stderr}")
 
 
 def generate_morph_specialized(

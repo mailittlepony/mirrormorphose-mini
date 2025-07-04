@@ -47,6 +47,10 @@ VIDEO_REVERSED = os.path.join(TEMP_DIR, "reversed_video.mp4")
 VIDEO_CONCATENATED = os.path.join(TEMP_DIR, "concatenated_video.mp4")
 VIDEO_AI = os.path.join(TEMP_DIR, "video_generated.mp4")
 MORPH_TEMP_DIR = os.path.join(TEMP_DIR, "morph_temp_processed")
+VIGNETTE_FILE = "res/vignette.png"
+VIDEO_CONCATENATED_FINAL = os.path.join(TEMP_DIR, "final_concatenated_video.mp4")
+VIDEO_MORPH_FINAL = os.path.join(TEMP_DIR, "final_morph_video.mp4")
+
 
 
 # ==== FUNCTIONS ====
@@ -174,31 +178,41 @@ def concatenate_videos(videos_list):
         print("[ERROR] One or more input video files not found.")
 
 
+def add_vignette_video(video_path, output_path):
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    print(f"[INFO] Starting adding vignette for: {video_path}")
+    video_processing.add_vignette(video_path, output_path, VIGNETTE_FILE)
+
+
 def run_full_pipeline():
     print("[INFO] Running full pipeline")
     
     if not fetch_assets():
         print("[ERROR] Could not fetch assets.")
         return
-    print("[SUCCESS] Step 1/7: Fetching assets complete.")
+    print("[SUCCESS] Step 1/8: Fetching assets complete.")
 
     remove_background_for_images([CAPTURE_IMG]) 
-    print("[SUCCESS] Step 2/7: Background removal complete.")
+    print("[SUCCESS] Step 2/8: Background removal complete.")
 
     generate_morph_wrapper()    
-    print("[SUCCESS] Step 3/7: Morphing video generation complete.")
+    print("[SUCCESS] Step 3/8: Morphing video generation complete.")
     
     send_video(OUTPUT_VIDEO)
-    print("[SUCCESS] Step 4/7: Morphing video generation sent.")
+    print("[SUCCESS] Step 4/8: Morphing video generation sent.")
 
     reverse_video(VIDEO_AI)
-    print("[SUCCESS] Step 5/7: Video reversal complete.")
+    print("[SUCCESS] Step 5/8: Video reversal complete.")
 
     concatenate_videos([VIDEO_AI, VIDEO_REVERSED])
-    print("[SUCCESS] Step 6/7: Video concatenation complete.")
+    print("[SUCCESS] Step 6/8: Video concatenation complete.")
+
+    add_vignette_video(VIDEO_CONCATENATED, VIDEO_CONCATENATED_FINAL)
+    add_vignette_video(OUTPUT_VIDEO, VIDEO_MORPH_FINAL)
+    print("[SUCCESS] Step 7/8: Vignette addition complete.")
 
     send_video(VIDEO_CONCATENATED)
-    print("[SUCCESS] Step 7/7: Final video sent.")
+    print("[SUCCESS] Step 8/8: Final video sent.")
     print("[SUCCESS] PIPELINE FINISHED SUCCESSFULLY")
 
 
@@ -248,6 +262,13 @@ def main():
         else:
             concatenate_videos([VIDEO_AI, VIDEO_REVERSED])
 
+    elif sys.argv[1] == "add_vignette":
+        if len(sys.argv) == 4:
+            add_vignette_video(sys.argv[2], sys.argv[3])
+        else:
+            add_vignette_video(VIDEO_CONCATENATED, VIDEO_CONCATENATED_FINAL)
+            add_vignette_video(OUTPUT_VIDEO, VIDEO_MORPH_FINAL)
+
     else:
         print("Usage:")
         print("  python main.py (runs full pipeline)")
@@ -256,6 +277,7 @@ def main():
         print("  python main.py generate_morph")
         print("  python main.py reverse_video <PATH_VIDEO>")
         print("  python main.py concatenate_videos <PATH_VIDEO_1> <PATH_VIDEO_2> ...")
+        print("  python main.py add_vignette_video <PATH_VIDEO_1> <PATH_OUTPUT> ...")
         print("  python main.py send_video <PATH_VIDEO>")
 
 
