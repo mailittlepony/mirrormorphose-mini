@@ -15,11 +15,13 @@ class Video:
     instance_count = 0
 
     def __init__(self, path):
-        self._service_name = f"org.mpris.MediaPlayer2.omxplayer{Video.instance_count}"
+        self._dbus_obj_path = "/org/mpris/MediaPlayer2"
+        self._dbus_base_interface = "org.mpris.MediaPlayer2"
+        self._dbus_service_name = f"{self._dbus_base_interface}.omxplayer{Video.instance_count}"
         self._user = getuser()
         self._dbus_address_path = f"/tmp/omxplayerdbus.{self._user}"
         self._dbus_pid_path = f"{self._dbus_address_path}.pid"
-        self._video_path = os.path.abspath(os.path.expanduser(path))
+        self._video_path = path
 
         cmd = [
             "omxplayer",
@@ -29,71 +31,58 @@ class Video:
             "-o", "hdmi",
             "--aspect-mode", "stretch",
             "--win", "0,0,1080,1920",
-            f"--dbus_name={self._service_name}",
-            os.path.abspath(os.path.expanduser(self._video_path))
+            f"--dbus_name={self._dbus_service_name}",
+            path
         ]
 
         try:
             self._omx_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self._wait_for_dbus(2)
+            self.pause()
 
-            with open(self._dbus_pid_path, "r") as f:
-                os.environ["DBUS_SESSION_BUS_PID"] = f.read().strip()
-
-            with open(self._dbus_address_path, "r") as f:
-                os.environ["DBUS_SESSION_BUS_ADDRESS"] = f.read().strip()
-
-            self._bus = SessionBus()
-
-            self._duration = self.send_command("Player", "Duration")
+            # self._duration = self.send_command("Player", "Duration")
 
             Video.instance_count += 1
-
-        except FileNotFoundError as e:
-            raise Exception(f"D-Bus environment files not found: {e}")
-
         except Exception as e:
             raise RuntimeError(f"Failed to launch omxplayer or set environment: {e}")
 
     def play(self):
-        self.send_command("Player", "Play")
+        self.send_command("Play")
 
     def pause(self):
-        self.send_command("Player", "Pause")
+        self.send_command("Pause")
 
     def stop(self):
-        self.send_command("Player", "Stop")
+        self.send_command("Stop")
 
     def set_position(self, ms):
-        return self.send_command("Player", "SetPosition", ("/not/used", ms,), "sx")
+        return self.send_command("SetPosition", ("/not/used", ms,), "sx")
 
     def set_layer(self, layer):
-        self.send_command("Player", "SetLayer", (layer,), "x")
+        self.send_command("SetLayer", (layer,), "x")
 
     def get_playback_status(self):
-        return self.send_command("Player", "PlaybackStatus")
+        return self.send_command("PlaybackStatus")
 
     def get_position(self):
-        return self.send_command("Player", "Posititon")
+        return self.send_command("Posititon")
 
     def get_duration(self):
         return self._duration
 
     def quit(self):
-        self.send_command("", "Quit")
+        self.send_command("Quit", root=True)
 
-    def send_command(self, interface, method, args=None, signature="()"):
-        if args is None:
-            args = ()
+    def send_command(self, method, args=None, signature="()", root=False):
 
-        variant = GLib.Variant(f"({signature})", args)
+        interface = "" if root else ".Player"
 
         return self._bus.con.call_sync(
-            self._service_name,
-            "/org/mpris/MediaPlayer2",
-            interface,
+            self._dbus_service_name,
+            self._dbus_obj_path,
+            f"{self._dbus_base_interface}{interface}",
             method,
-            variant,
+            None,
             None,
             Gio.DBusCallFlags.NONE,
             -1,
@@ -107,7 +96,7 @@ class Video:
             os.remove(self._dbus_pid_path)
 
         try:
-            self.send_command("Quit", "root")
+            self.quit()
         except Exception as e:
             print(f"Failed to quit omxplayer: {e}")
 
@@ -121,6 +110,12 @@ class Video:
                 stderr = self._omx_proc.stderr.read().decode()
                 raise RuntimeError(f"omxplayer failed to start: '{stderr}'")
             try:
+                with open(self._dbus_pid_path, "r") as f:
+                    os.environ["DBUS_SESSION_BUS_PID"] = f.read().strip()
+
+                with open(self._dbus_address_path, "r") as f:
+                    os.environ["DBUS_SESSION_BUS_ADDRESS"] = f.read().strip()
+
                 self._bus = SessionBus()
                 return
             except Exception:
@@ -137,12 +132,11 @@ def init():
     overlayx.init()
 
 def load_videos():
-    global morph_video, ai_video
-    morph_video = Video(shared.MORPH_VIDEO_PATH)
-    ai_video = Video(shared.AI_VIDEO_PATH)
+    global morph_video
+    path = os.path.abspath(os.path.expanduser("~/generated_video.mp4"))
+    morph_video = Video(path)
 
     morph_video.pause()
-    ai_video.pause()
 
 def play():
     morph_video.set_position(0)
