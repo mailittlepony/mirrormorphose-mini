@@ -86,7 +86,7 @@ int overlay_init(const char *img_path)
     uint32_t vc_image_ptr;
     fade_res = vc_dispmanx_resource_create(IMAGE_FORMAT, screen_width,
                                            screen_height, &vc_image_ptr);
-    if (fade_res)
+    if (!fade_res)
     {
         fprintf(stderr, "Failed to create resource\n");
         return 1;
@@ -116,7 +116,7 @@ int overlay_init(const char *img_path)
         vignette_res = vc_dispmanx_resource_create(
             IMAGE_FORMAT, screen_width, screen_height, &vc_image_ptr);
 
-        if (vignette_res)
+        if (!vignette_res)
         {
             fprintf(stderr, "Failed to create resource\n");
             return 1;
