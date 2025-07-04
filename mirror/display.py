@@ -45,7 +45,6 @@ class Video:
 
             self._duration = self.dbus_get_property("Duration", return_signature="x")[0]
 
-
             Video.instance_count += 1
         except Exception as e:
             raise RuntimeError(f"Failed to launch omxplayer or set environment: {e}")
@@ -60,7 +59,12 @@ class Video:
         self.dbus_call_method("Stop")
 
     def set_position(self, ms):
-        return self.dbus_call_method("SetPosition", ("/not/used", ms,), "sx")
+        position = self.get_position()
+        if position > 0:
+            self.dbus_call_method("Seek", (-position,), "x")
+
+    def seek(self, ms):
+        return self.dbus_call_method("Seek", ( ms,), "x")
 
     def set_layer(self, layer):
         self.dbus_call_method("SetLayer", (layer,), "x")
@@ -155,24 +159,23 @@ class Video:
 fade_delay_ms = 2000
 
 def init():
-    overlayx.init(os.path.abspath("res/vignette.png"))
+    overlayx.init("")
 
 def load_videos():
     global morph_video, ai_video
     morph_video = Video(os.path.abspath(shared.MORPH_VIDEO_PATH))
-    ai_video = Video(os.path.abspath(os.path.expanduser("~/generated_video.mp4")))
-    # ai_video = Video(os.path.abspath("ramdisk/concatenated_video.mp4"))
+    ai_video = Video(os.path.abspath(shared.AI_VIDEO_PATH))
 
     def monitor_morph():
         while True:
             if morph_video.get_duration() - morph_video.get_position() <= 200000:
-                morph_video.pause()
                 morph_video.set_position(0)
-                morph_video.set_layer(0)
+                morph_video.pause()
+                ai_video.play()
                 ai_video.set_position(0)
                 ai_video.set_layer(1)
-                ai_video.play()
                 morph_video.set_layer(0)
+            time.sleep(0.1)
 
     threading.Thread(target=monitor_morph, daemon=True).start()
 
@@ -185,9 +188,13 @@ def play():
     threading.Thread(target=overlayx.start_fade_in, args=(fade_delay_ms, 5), daemon=True).start()
 
 def stop():
-    ai_video.pause()
     morph_video.pause()
-    threading.Thread(target=overlayx.start_fade_out, args=(fade_delay_ms, 5), daemon=True).start()
+
+    def fade_out():
+        overlayx.start_fade_out(fade_delay_ms, 5)
+        ai_video.pause()
+
+    threading.Thread(target=fade_out, daemon=True).start()
 
 def free():
     overlayx.free()
