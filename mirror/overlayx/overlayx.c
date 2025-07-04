@@ -30,8 +30,8 @@
 // -----------------------------------------------------------------------------
 #define IMAGE_FORMAT VC_IMAGE_RGBA16
 
-#define FADE_LAYER 2
-#define VIGNETTE_LAYER 3
+#define FADE_LAYER 3
+#define VIGNETTE_LAYER 2
 
 // -----------------------------------------------------------------------------
 // Static Variables
@@ -169,6 +169,8 @@ int overlay_init(const char *img_path)
                                         &fade_alpha, NULL, VC_IMAGE_ROT0);
 
     vc_dispmanx_update_submit_sync(update);
+
+    return 0;
 }
 
 int overlay_start_fade_in(int duration_ms, int step)
@@ -183,13 +185,15 @@ int overlay_start_fade_in(int duration_ms, int step)
         vc_dispmanx_update_submit_sync(update);
         usleep(delay_us);
     }
+
+    return 0;
 }
 
 int overlay_start_fade_out(int duration_ms, int step)
 {
     int delay_us = (duration_ms * 1000) / ((255 + step - 1) / step);
 
-    for (int a = 0; a < 255; a += step)
+    for (int a = 0; a < 256; a += step)
     {
         DISPMANX_UPDATE_HANDLE_T update = vc_dispmanx_update_start(display_num);
         vc_dispmanx_element_change_attributes(update, fade_elmt, 2, FADE_LAYER,
@@ -197,6 +201,8 @@ int overlay_start_fade_out(int duration_ms, int step)
         vc_dispmanx_update_submit_sync(update);
         usleep(delay_us);
     }
+
+    return 0;
 }
 
 int overlay_free(void)
@@ -209,4 +215,6 @@ int overlay_free(void)
     vc_dispmanx_resource_delete(vignette_res);
     vc_dispmanx_resource_delete(fade_res);
     vc_dispmanx_display_close(display);
+
+    return 0;
 }
