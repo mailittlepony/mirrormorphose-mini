@@ -90,15 +90,16 @@ class Video:
         )
 
     def close(self):
+        if self._omx_proc.poll() is None:
+            try:
+                self.quit()
+            except Exception as e:
+                print(f"Failed to quit omxplayer: {e}")
+
         if os.path.exists(self._dbus_address_path):
             os.remove(self._dbus_address_path)
         if os.path.exists(self._dbus_pid_path):
             os.remove(self._dbus_pid_path)
-
-        try:
-            self.quit()
-        except Exception as e:
-            print(f"Failed to quit omxplayer: {e}")
 
         Video.instance_count -= 1
 
