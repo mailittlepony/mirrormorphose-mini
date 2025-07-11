@@ -11,7 +11,7 @@ from cgi import FieldStorage
 from mimetypes import guess_type
 from shared import STATIC_DIR, RAM_DISK
 from dotenv import load_dotenv
-import cv2, os, api, shared, display
+import cv2, os, shared, display, camera, time
 
 load_dotenv()
 auth_token = os.getenv("AUTH_TOKEN")
@@ -20,7 +20,8 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
 # Override
     def do_GET(self):
         routes = { 
-            "/": self._handle_serve_index 
+            "/": self._handle_serve_index,
+            "/get_camera_stream": self._handle_get_camera_stream,
         }
         handler = routes.get(self.path)
         if handler:
@@ -38,6 +39,7 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
             "/load_videos": self._handle_load_videos,
             "/start_eye_contact": self._handle_start_eye_contact,
             "/stop_eye_contact": self._handle_stop_eye_contact,
+            "/get_user_image": self._handle_get_user_image,
         }
         handler = routes.get(self.path)
         if handler:
@@ -84,6 +86,52 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._send_response_str(500, f"Error reading file: {e}")
 
+    def _handle_get_camera_stream(self):
+        auth_header = self.headers.get("Authorization")
+        #if auth_header != f"Bearer {auth_token}":
+        #    self._send_response_str(403, f"Forbidden access {auth_token}")
+        #   return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        try:
+            while True:
+                frame = camera.get_frame()
+                if frame is None:
+                    print("Frame is None, skipping.")
+                    time.sleep(0.05)
+                    continue
+
+                # Encode frame to JPEG
+                ret, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                if not ret:
+                    print("JPEG encoding failed, skipping.")
+                    time.sleep(0.05)
+                    continue
+
+                jpeg_bytes = jpeg.tobytes()
+
+                # Send multipart response
+                self.wfile.write(b"--frame\r\n")
+                self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                self.wfile.write(f"Content-Length: {len(jpeg_bytes)}\r\n\r\n".encode())
+                self.wfile.write(jpeg_bytes)
+                self.wfile.write(b"\r\n")
+                self.wfile.flush()
+
+                #time.sleep(0.05)  # ~20 FPS
+
+        except (ConnectionResetError, BrokenPipeError):
+            print("MJPEG client disconnected.")
+        except Exception as e:
+            print(f"Unexpected error in stream: {e}")
+        finally:
+            print("Ending stream.")
+
     """
     POST Handlers
     """
@@ -117,10 +165,11 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
         try:
             isadmin =  auth_header == f"Bearer {auth_token}"
 
-            if file_ext.lower() in [".jpg", ".jpeg", ".png"]:
+            if file_ext.lower() in [".jpg", ".jpeg"]:
                 response = f"Child picture uploaded: {filename}"
-                filename = f"user_photo{file_ext}"
-                api.runway_generate_video(file_item)
+                filename = f"user_photo.jpg"
+                #img_bytes = file_item.file.read()
+                #api.runway_generate_video(img_bytes)
             elif filename == os.path.basename(shared.MORPH_VIDEO_PATH):
                 if not isadmin:
                     raise Exception("Access forbidden.")
@@ -143,6 +192,18 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._send_response_str(403, f'{e}')
 
+    def _handle_get_user_image(self):
+        try:
+            with open("ramdisk/user_photo.jpg", 'rb') as img:
+                img_bytes = img.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(img_bytes)))
+                self.end_headers()
+                self.wfile.write(img_bytes)
+        except Exception as e:
+            self._send_response_str(400, f"{e}")
+
     def _handle_get_video_url(self):
         video_url = shared.shared_data.get("generated_video_url")
 
@@ -158,8 +219,7 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            with shared.lock:
-                frame = shared.shared_data.get("last_camera_frame")
+            frame = camera.get_frame()
 
             if frame is None:
                 raise RuntimeError("last frame is None")

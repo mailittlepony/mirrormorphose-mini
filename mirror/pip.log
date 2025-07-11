@@ -1,0 +1,4 @@
+nohup: ignoring input
+Looking in indexes: https://pypi.org/simple, https://www.piwheels.org/simple
+Collecting opencv-contrib-python
+  Using cached opencv-contrib-python-4.11.0.86.tar.gz (150.6 MB)

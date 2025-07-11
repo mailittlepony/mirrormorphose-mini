@@ -16,12 +16,10 @@ from dotenv import load_dotenv
 load_dotenv()
 api_key = getenv("RUNWAYML_API_SECRET")
 
-test_video = True
+test_video = False
 runway_client = RunwayML(api_key=api_key)
 
 def runway_generate_video(img):
-    video_path = f"{RAM_DISK}/generated_video.mp4"
-
     if test_video:
         with shared.lock:
             shared.shared_data["generated_video_url"] = "https://www.youtube.com" 
@@ -38,8 +36,8 @@ def runway_generate_video(img):
             task = runway_client.image_to_video.create(
                 model='gen4_turbo',
                 prompt_image=data_uri,
-                prompt_text='Generate a video',
-                ratio='1280:720',
+                prompt_text='The camera is still, with natural lighting. Subject sits still and maintains a serious expression holding direct eye contact with the camera while blinking occasionally. Subject nods slowly at the 3-second marks and occasionally tilts his head slightly.',
+                ratio='720:1280',
                 duration=5,
             ).wait_for_task_output()
 

@@ -105,6 +105,7 @@ class LightweightFaceDetector:
     def _get_eye_data(self, frame, face_bbox):
         fx, fy, fw, fh = face_bbox
         face_roi_color = frame[fy:fy+fh, fx:fx+fw]
+        face_roi_gray = face_roi_color
         face_roi_gray = cv2.cvtColor(face_roi_color, cv2.COLOR_BGR2GRAY)
 
         eyes = self._eye_cascade.detectMultiScale(face_roi_gray, 1.1, 3)
@@ -202,6 +203,7 @@ class LightweightFaceDetector:
         is_looking_forward = (stable_prediction == "forward")
 
         if is_looking_forward:
+            print("gaze")
             self._lookaway_start = None
             if self._start_stare is None:
                 self._start_stare = current_time
@@ -210,6 +212,7 @@ class LightweightFaceDetector:
                 if self._gaze_start_callback:
                     self._gaze_start_callback()
         else: 
+            print("degaze")
             if self._gaze_active:
                 if self._lookaway_start is None:
                     self._lookaway_start = current_time

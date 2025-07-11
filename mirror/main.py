@@ -5,11 +5,11 @@
 #
 # Distributed under terms of the GLPv3 license.
 
-import cv2
-import camera
+import cv2, time
+# import camera
 import http_server
 import shared
-from face_recognition import LightweightFaceDetector
+# from face_recognition import LightweightFaceDetector
 
 try:
     import display
@@ -35,18 +35,22 @@ MODEL_DIR = "models"
 def run():
     http_server.start_non_blocking()
 
-    face_detector = LightweightFaceDetector(f"{MODEL_DIR}/eye_direction_model.tflite", f"{MODEL_DIR}/haarcascade_frontalface_default.xml", f"{MODEL_DIR}/haarcascade_eye_tree_eyeglasses.xml")
-    face_detector.set_gaze_start_callback(gaze_start_callback)
-    face_detector.set_gaze_end_callback(gaze_end_callback)
+    # face_detector = LightweightFaceDetector(f"{MODEL_DIR}/eye_direction_model.tflite", f"{MODEL_DIR}/haarcascade_frontalface_default.xml", f"{MODEL_DIR}/haarcascade_eye_tree_eyeglasses.xml")
+    # face_detector.set_gaze_start_callback(gaze_start_callback)
+    # face_detector.set_gaze_end_callback(gaze_end_callback)
 
     try:
+        frame_count = 0
+        start_time = time.time()
+
         while True:
-            frame = camera.get_frame()
+            frame_count += 1
 
-            face_detector.process_frame(frame)
-
-            with shared.lock:
-                shared.shared_data["last_camera_frame"] = frame
+            if time.time() - start_time >= 1.0:
+                fps = frame_count / (time.time() - start_time)
+                # print(f"FPS: {fps:.2f}")
+                frame_count = 0
+                start_time = time.time()
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -55,7 +59,7 @@ def run():
         print("Shutting down...")
 
     finally:
-        camera.release()
+        # camera.release()
         cv2.destroyAllWindows()
         http_server.stop()
 
