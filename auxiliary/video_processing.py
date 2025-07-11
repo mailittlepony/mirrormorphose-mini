@@ -9,168 +9,156 @@
 This script processes the video.
 """
 
-import subprocess
 import os
-import requests
+import logging
 import cv2
 import numpy as np
-import json
-import shutil
+from pathlib import Path
+import subprocess
 
-def get_first_frame(video_path, output_image_path):
-    if not os.path.exists(video_path):
-        print(f"[ERROR] Input video not found at: {video_path}")
-        return False
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-    print(f"[INFO] Extracting first frame from '{video_path}'...")
-    
-    command = [
-        'ffmpeg',
-        '-i', video_path,       
-        '-vframes', '1',       
-        '-q:v', '2',          
-        '-y',                
-        output_image_path
-    ]
-
+def reverse_video_from_path(input_video_path: str, output_video_path: str) -> bool:
     try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
-        print(f"[SUCCESS] Frame saved successfully to: {output_image_path}")
+        cap = cv2.VideoCapture(input_video_path)
+        if not cap.isOpened():
+            logger.error(f"Cannot open video {input_video_path}")
+            return False
+        
+        frames = []
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frames.append(frame)
+        cap.release()
+        
+        frames.reverse()
+        height, width, layers = frames[0].shape
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_video_path, fourcc, 25, (width, height))
+
+        for frame in frames:
+            out.write(frame)
+        out.release()
+
+        logger.info(f"Video reversed and saved to {output_video_path}")
         return True
-    except FileNotFoundError:
-        print("[ERROR] ffmpeg is not installed or not in your PATH.")
-        return False
-    except subprocess.CalledProcessError as e:
-        print("[ERROR] Error during frame extraction:")
-        print("Return Code:", e.returncode)
-        print("Output:", e.stderr)
+    except Exception as e:
+        logger.error(f"Failed to reverse video: {e}")
         return False
 
-
-def download_video(url, output_path):
+def concatenate_videos_ffmpeg(video_paths: list, output_path: str) -> bool:
     try:
-        with requests.get(url, stream=True, timeout=30) as r:
-            r.raise_for_status()
-            
-            with open(output_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-                    
-        print("[SUCCESS] Video downloaded successfully.")
+        list_file = Path("concat_list.txt")
+        with list_file.open("w") as f:
+            for video_path in video_paths:
+                f.write(f"file '{video_path}'\n")
+        
+        cmd = [
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+            "-i", str(list_file),
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:a", "aac",
+            output_path
+        ]
+
+        logger.info("Concatenating videos with ffmpeg...")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        list_file.unlink(missing_ok=True)
+
+        if result.returncode != 0:
+            logger.error(f"FFmpeg concat failed: {result.stderr}")
+            return False
+
+        logger.info(f"Videos concatenated successfully to {output_path}")
         return True
-        
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Failed to download video: {e}")
+    except Exception as e:
+        logger.error(f"Error concatenating videos: {e}")
         return False
 
-
-def reverse_video_from_path(video_path, output_dir):
-    command = [
-        'ffmpeg',
-        '-i', video_path,
-        '-vf', 'reverse',
-        '-an',
-        '-y',
-        output_dir
-    ]
-    
+def add_vignette(video_path: str, output_path: str, vignette_image_path: str) -> bool:
     try:
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-        print(f"[SUCCESS] FFmpeg command successful! Reversed video saved as: {output_dir}")
-        
-    except FileNotFoundError:
-        print("[ERROR] ffmpeg is not installed or not in your PATH.")
-        
-    except subprocess.CalledProcessError as e:
-        print("[ERROR] Error during FFmpeg execution:")
-        print("Return Code:", e.returncode)
-        print("Output:", e.stderr)
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            logger.error(f"Cannot open video {video_path}")
+            return False
 
+        vignette = cv2.imread(vignette_image_path, cv2.IMREAD_UNCHANGED)
+        if vignette is None:
+            logger.error(f"Failed to load vignette image {vignette_image_path}")
+            return False
 
-def concatenate_videos_ffmpeg(video_list, output_path, temp_list_file="mylist.txt"):
-    with open(temp_list_file, 'w') as f:
-        for video in video_list:
-            f.write(f"file '{os.path.abspath(video)}'\n")
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        fps = cap.get(cv2.CAP_PROP_FPS)
 
-    print(f"[INFO] Created temporary list file: {temp_list_file}")
+        vignette_resized = cv2.resize(vignette, (width, height))
 
-    command = [
-        'ffmpeg',
-        '-f', 'concat',     
-        '-safe', '0',        
-        '-i', temp_list_file,
-        '-c', 'copy',       
-        '-y',              
-        output_path
-    ]
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            b, g, r, a = cv2.split(vignette_resized)
+            alpha = a.astype(float) / 255.0
+            overlay_color = cv2.merge((b, g, r))
+
+            frame_float = frame.astype(float)
+            overlay_float = overlay_color.astype(float)
+
+            for c in range(3):
+                frame_float[:, :, c] = (alpha * overlay_float[:, :, c] +
+                                        (1 - alpha) * frame_float[:, :, c])
+
+            frame = frame_float.astype(np.uint8)
+            out.write(frame)
+
+        cap.release()
+        out.release()
+        logger.info(f"Vignette added and saved to {output_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to add vignette: {e}")
+        return False
+
+def get_first_frame(video_path: str, output_image_path: str) -> bool:
     try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
-        print(f"[SUCCESS] Concatenation successful! Video saved as: {output_path}")
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            logger.error(f"Cannot open video {video_path}")
+            return False
         
-    except FileNotFoundError:
-        print("[ERROR] ffmpeg is not installed or not in your PATH.")
+        ret, frame = cap.read()
+        cap.release()
+        if not ret:
+            logger.error("Failed to read first frame")
+            return False
         
-    except subprocess.CalledProcessError as e:
-        print("[ERROR] Error during FFmpeg execution:")
-        print(e.stderr)
-        
-    finally:
-        if os.path.exists(temp_list_file):
-            os.remove(temp_list_file)
-            print(f"[INFO] Removed temporary list file: {temp_list_file}")
+        cv2.imwrite(output_image_path, frame)
+        logger.info(f"First frame extracted and saved to {output_image_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Error extracting first frame: {e}")
+        return False
 
-
-def add_vignette(input_video: str, output_video: str, vignette_png: str):
-    for f in [input_video, vignette_png]:
-        if not os.path.exists(f):
-            raise FileNotFoundError(f"Input file not found: {f}")
-
-    print(f"Probing video dimensions for: {input_video}")
-    ffprobe_cmd = [
-        "ffprobe",
-        "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height",
-        "-of", "json",
-        input_video
-    ]
-    
+def download_video(url: str, output_path: str) -> bool:
+    import requests
     try:
-        result = subprocess.run(ffprobe_cmd, capture_output=True, text=True, check=True)
-        video_info = json.loads(result.stdout)
-        
-        if "streams" not in video_info or not video_info["streams"]:
-             raise ValueError("Could not parse video stream information.")
-             
-        dims = video_info["streams"][0]
-        width = dims['width']
-        height = dims['height']
-        print(f"Detected video dimensions: {width}x{height}")
-
-    except subprocess.CalledProcessError as e:
-        raise FFmpegError(f"ffprobe failed to get video dimensions:\n{e.stderr}")
-    except (json.JSONDecodeError, KeyError, IndexError):
-        raise ValueError(f"Could not parse ffprobe output for video dimensions.")
-
-    print(f"Applying vignette '{vignette_png}' to '{input_video}'...")
-    ffmpeg_cmd = [
-        "ffmpeg",
-        "-i", input_video,     
-        "-i", vignette_png,     
-        "-filter_complex", f"[1:v]scale={width}:{height}[vignette_scaled];[0:v][vignette_scaled]overlay",
-        "-c:a", "copy",         
-        "-y",                    
-        output_video
-    ]
-
-    try:
-        subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)
-        print(f"Successfully created vignetted video at: {output_video}")
-    except subprocess.CalledProcessError as e:
-        raise FFmpegError(f"ffmpeg command failed.\n"
-                          f"Command: {' '.join(e.cmd)}\n"
-                          f"ffmpeg stderr:\n{e.stderr}")
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with open(output_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        logger.info(f"Video downloaded from {url} to {output_path}")
+        return True
+    except requests.RequestException as e:
+        logger.error(f"Failed to download video: {e}")
+        return False
 
 
 def generate_morph_specialized(
@@ -191,14 +179,14 @@ def generate_morph_specialized(
     This version is corrected to handle the external script's behavior.
     """
     if not all(os.path.exists(p) for p in [capture_rembg_path, video_frame_rembg_path]):
-        print("[ERROR] One or more input files for morphing not found.")
+        logging.error("One or more input files for morphing not found.")
         return False
     
     os.makedirs(aligned_dir, exist_ok=True)
     os.makedirs(temp_dir, exist_ok=True)
     
     try:
-        print("[INFO] Aligning background-removed faces...")
+        logging.info("Aligning background-removed faces...")
         align_command = [
             "python", align_script_path,
             "-images", images_path,
@@ -207,12 +195,12 @@ def generate_morph_specialized(
             "-outdir", aligned_dir
         ]
         subprocess.run(align_command, check=True, capture_output=True, text=True)
-        print("[SUCCESS] Face alignment completed.")
+        logging.info("Face alignment completed.")
     except FileNotFoundError:
-        print(f"[ERROR] Alignment script not found at '{align_script_path}'. Please check the path.")
+        logging.error(f"Alignment script not found at '{align_script_path}'. Please check the path.")
         return False
     except subprocess.CalledProcessError as e:
-        print(f"[ERROR] Face alignment failed: {e.stderr}")
+        logging.error(f"Face alignment failed: {e.stderr}")
         return False
         
     base_capture_name = os.path.basename(capture_rembg_path)
@@ -224,18 +212,17 @@ def generate_morph_specialized(
     aligned_capture_path = os.path.join(aligned_dir, aligned_capture_name)
     aligned_frame_path = os.path.join(aligned_dir, aligned_frame_name)
     
-    print(f"[DEBUG] Checking for aligned files: {aligned_capture_path}, {aligned_frame_path}")
+    logging.debug(f"Checking for aligned files: {aligned_capture_path}, {aligned_frame_path}")
     
     if not all(os.path.exists(p) for p in [aligned_capture_path, aligned_frame_path]):
-        print("[ERROR] Aligned images were not created by the script with the expected names.")
-        # Add a helpful debug print
+        logging.error("Aligned images were not created by the script with the expected names.")
         if os.path.exists(aligned_dir):
-            print(f"[DEBUG] Contents of '{aligned_dir}': {os.listdir(aligned_dir)}")
+            logging.debug(f"Contents of '{aligned_dir}': {os.listdir(aligned_dir)}")
         return False
 
     target_frame = cv2.imread(video_frame_rembg_path)
     target_h, target_w = target_frame.shape[:2]
-    print(f"[INFO] Target resolution for morph is {target_w}x{target_h}.")
+    logging.info(f"Target resolution for morph is {target_w}x{target_h}.")
 
     aligned_capture_img = cv2.imread(aligned_capture_path)
     canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
@@ -266,7 +253,7 @@ def generate_morph_specialized(
     os.rename(final_frame_path, os.path.join(final_morph_input_dir, "02_frame.jpg"))
     
     try:
-        print("[INFO] Generating final morphing video...")
+        logging.info("Generating final morphing video...")
         morph_command = [
             "python", morph_script_path,
             "-morph",
@@ -277,12 +264,12 @@ def generate_morph_specialized(
             "-out", output_video_path
         ]
         subprocess.run(morph_command, check=True, capture_output=True, text=True)
-        print(f"[SUCCESS] Morphing video created: {output_video_path}")
+        logging.info(f"Morphing video created: {output_video_path}")
     except FileNotFoundError:
-        print(f"[ERROR] Morphing script not found at '{morph_script_path}'. Please check the path.")
+        logging.error(f"Morphing script not found at '{morph_script_path}'. Please check the path.")
         return False
     except subprocess.CalledProcessError as e:
-        print(f"[ERROR] Final morphing process failed: {e.stderr}")
+        logging.error(f"Final morphing process failed: {e.stderr}")
         return False
 
     return True

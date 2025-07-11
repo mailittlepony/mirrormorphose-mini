@@ -14,272 +14,310 @@ This script can:
 5. Concatenate videos
 """
 
+
 import sys
 import os
+import logging
 import requests
-from time import sleep
-import subprocess
+import time
+import cv2
+from dotenv import load_dotenv
+from face_recognition import LightweightFaceDetector
 import image_processing
 import video_processing
-from dotenv import load_dotenv
+import api
+
+from pathlib import Path
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
-auth_token = os.getenv("AUTH_TOKEN")
+AUTH_TOKEN = os.getenv("AUTH_TOKEN")
 
 
-# ==== VARIABLES ====
+# ==== Constants ====
 
 
-URL = "http://10.104.96.184:8000"
-TEMP_DIR = "temp"
-TEMP_REMBG_DIR = "temp/temp_rembg"
-CAPTURE_IMG = os.path.join(TEMP_DIR, "capture.jpg")
-CAPTURE_REMBG = os.path.join(TEMP_REMBG_DIR, "capture_rembg.jpg")
-VIDEO_FRAME_REMBG = os.path.join(TEMP_REMBG_DIR, "video_frame_rembg.jpg")
-ALIGNED_DIR = os.path.join(TEMP_DIR, "aligned_faces")
-OUTPUT_VIDEO = os.path.join(TEMP_DIR, "morph_video.mp4")
-FACE_ALIGN_SCRIPT = "face-movie/face-movie/align.py"
-MORPH_SCRIPT = "face-movie/face-movie/main.py"
-TRANSITION_DUR = 2.0
-PAUSE_DUR = 0.5
-FPS = 25
-VIDEO_REVERSED = os.path.join(TEMP_DIR, "reversed_video.mp4")
-VIDEO_CONCATENATED = os.path.join(TEMP_DIR, "concatenated_video.mp4")
-VIDEO_AI = os.path.join(TEMP_DIR, "video_generated.mp4")
-MORPH_TEMP_DIR = os.path.join(TEMP_DIR, "morph_temp_processed")
-VIGNETTE_FILE = "res/vignette.png"
-VIDEO_CONCATENATED_FINAL = os.path.join(TEMP_DIR, "final_concatenated_video.mp4")
-VIDEO_MORPH_FINAL = os.path.join(TEMP_DIR, "final_morph_video.mp4")
-
+TEMP_DIR = Path("temp")
+TEMP_REMBG_DIR = TEMP_DIR / "temp_rembg"
+FACE_ALIGN_SCRIPT = Path("face-movie/face-movie/align.py")
+MORPH_SCRIPT = Path("face-movie/face-movie/main.py")
+MODEL_PATH = Path("models/eye_direction_model.tflite")
+FACE_CASCADE_PATH = Path('models/haarcascade_frontalface_default.xml')
+EYE_CASCADE_PATH = Path('models/haarcascade_eye_tree_eyeglasses.xml')
+CAMERA_INDEX = 0
+URL = "http://mirrormini.local:8000"
 
 
 # ==== FUNCTIONS ====
 
 
-def fetch_assets():
-    get_camera_frame_url = f"{URL}/get_camera_capture"
-    get_video_url = f"{URL}/get_video_url"
-
-    print("[INFO] Requesting camera image...")
+def fetch_assets() -> bool:
+    headers = {'Authorization': f'Bearer {AUTH_TOKEN}'}
     try:
-        headers = {
-            'Authorization': f'Bearer {auth_token}'
-        }
-        response = requests.post(get_camera_frame_url, headers=headers)
-        response.raise_for_status() 
-        if response.headers.get("Content-Type", "").startswith("image/"):
-            with open(CAPTURE_IMG, 'wb') as f:
-                f.write(response.content)
-            print(f"[SUCCESS] Image saved to {CAPTURE_IMG}")
+        resp = requests.post(f"{URL}/get_camera_capture", headers=headers)
+        resp.raise_for_status()
+        if resp.headers.get("Content-Type", "").startswith("image/"):
+            (TEMP_DIR / "capture.jpg").write_bytes(resp.content)
+            logger.info("Camera capture saved.")
         else:
-            print("[ERROR] Server did not return an image for camera capture.")
+            logger.error("Camera capture response not an image.")
             return False
+
+        resp = requests.post(f"{URL}/get_user_image", headers=headers)
+        resp.raise_for_status()
+        if resp.headers.get("Content-Type", "").startswith("image/"):
+            (TEMP_DIR / "user_image.jpg").write_bytes(resp.content)
+            logger.info("User image saved.")
+        else:
+            logger.error("User image response not an image.")
+            return False
+
     except requests.RequestException as e:
-        print(f"[ERROR] Failed to download camera image: {e}")
+        logger.error(f"Failed fetching assets: {e}")
         return False
-
-    print("[INFO] Requesting video url...")
-    while True:
-        try:
-            response = requests.post(get_video_url, timeout=10)
-            response.raise_for_status()
-            video_url = response.text.strip()
-            print(f"[SUCCESS] Video URL retrieved: {video_url}")
-            break
-        except requests.RequestException as e:
-            print(f"[ERROR] Request to get video URL failed: {e}")
-            return False
-
-    if not video_processing.download_video(video_url, VIDEO_AI):
-        print("[ERROR] Video download failed. Aborting.")
-        return False
-
-    if not video_processing.get_first_frame(VIDEO_AI, VIDEO_FRAME_REMBG):
-        print("[ERROR] Frame extraction failed. Aborting.")
-        return False
-
-    print("\n[COMPLETE] All assets fetched and prepared successfully.")
     return True
 
 
-def generate_morph_wrapper():
-    """
-    A wrapper to call the specialized morph generation process.
-    """
-    print("[INFO] Preparing to generate specialized morph.")
-    
+def generate_morph_wrapper() -> bool:
     success = video_processing.generate_morph_specialized(
-        images_path=TEMP_REMBG_DIR,
-        capture_rembg_path=CAPTURE_REMBG,
-        video_frame_rembg_path=VIDEO_FRAME_REMBG,
-        output_video_path=OUTPUT_VIDEO,
-        align_script_path=FACE_ALIGN_SCRIPT,
-        morph_script_path=MORPH_SCRIPT,
-        aligned_dir=ALIGNED_DIR,
-        temp_dir=MORPH_TEMP_DIR,
-        transition_dur=TRANSITION_DUR,
-        pause_dur=PAUSE_DUR,
-        fps=FPS
+        images_path=str(TEMP_REMBG_DIR),
+        capture_rembg_path=str(TEMP_REMBG_DIR / "capture_rembg.jpg"),
+        video_frame_rembg_path=str(TEMP_REMBG_DIR / "video_frame_rembg.jpg"),
+        output_video_path=str(TEMP_DIR / "morph_video.mp4"),
+        align_script_path=str(FACE_ALIGN_SCRIPT),
+        morph_script_path=str(MORPH_SCRIPT),
+        aligned_dir=str(TEMP_DIR / "aligned_faces"),
+        temp_dir=str(TEMP_DIR / "morph_temp_processed"),
+        transition_dur=2.0,
+        pause_dur=0.5,
+        fps=25
     )
-    
-    if success:
-        print("[INFO] Morph generation process finished successfully in main.")
-    else:
-        print("[ERROR] Morph generation process failed in main.")
+    if not success:
+        logger.error("Morph generation failed.")
+    return success
 
 
-def send_video(video_path):
-    send_media_url = f"{URL}/upload_media"
+def send_video(video_path: str) -> bool:
+    path = Path(video_path)
+    if not path.is_file():
+        logger.error(f"Video file {video_path} does not exist.")
+        return False
 
-    if not os.path.isfile(video_path):
-        print(f"[ERROR] File '{video_path}' does not exist.")
-        return
-
-    filename = os.path.basename(video_path)
-
-    with open(video_path, 'rb') as f:
-        files = {
-            'file': (filename, f, 'video/mp4')
-        }
-        headers = {
-            'Authorization': f'Bearer {auth_token}'
-        }
-
-        print("[INFO] Sending video to server...")
-        response = requests.post(send_media_url, files=files, headers=headers)
-
-    if response.ok:
-        print("[SUCCESS] Video sent successfully!")
-    else:
-        print(f"[ERROR] Failed to send video: {response.status_code}\n{response.text}")
+    with path.open('rb') as f:
+        files = {'file': (path.name, f, 'video/mp4')}
+        headers = {'Authorization': f'Bearer {AUTH_TOKEN}'}
+        try:
+            response = requests.post(f"{URL}/upload_media", files=files, headers=headers)
+            response.raise_for_status()
+            logger.info(f"Uploaded video {video_path} successfully.")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"Failed to send video: {e}")
+            return False
 
 
-def remove_background_for_images(image_paths):
+def remove_background_for_images(image_paths) -> bool:
     os.makedirs(TEMP_REMBG_DIR, exist_ok=True)
+    all_success = True
     for image_path in image_paths:
         filename, ext = os.path.splitext(os.path.basename(image_path))
         output_path = os.path.join(TEMP_REMBG_DIR, f"{filename}_rembg{ext}")
-        image_processing.remove_background(image_path, output_path)
-        print("[SUCCESS] Background removed successfully!")
+        success = image_processing.remove_background(image_path, output_path)
+        if not success:
+            print(f"[ERROR] Failed to remove background from {image_path}")
+            all_success = False
+    return all_success
 
 
-def reverse_video(video_path):
-    os.makedirs(TEMP_DIR, exist_ok=True)
-    print(f"[INFO] Starting video reversal for: {video_path}")
-    video_processing.reverse_video_from_path(video_path, VIDEO_REVERSED)
+def reverse_video(video_path) -> bool:
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = TEMP_DIR / "reversed_video.mp4"
+    try:
+        video_processing.reverse_video_from_path(str(video_path), str(output_path))
+        return True
+    except Exception as e:
+        logger.error(f"Failed to reverse video: {e}")
+        return False
 
 
-def concatenate_videos(videos_list):
-    os.makedirs(TEMP_DIR, exist_ok=True)
-    if all(os.path.exists(v) for v in videos_list):
-        print(f"[INFO] Starting video concatenation for: {', '.join(videos_list)}")
-        video_processing.concatenate_videos_ffmpeg(videos_list, VIDEO_CONCATENATED)
-    else:
-        print("[ERROR] One or more input video files not found.")
+def concatenate_videos(videos_list) -> bool:
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    if not all(Path(v).exists() for v in videos_list):
+        logger.error("One or more videos for concatenation do not exist.")
+        return False
+    output_path = TEMP_DIR / "concatenated_video.mp4"
+    try:
+        video_processing.concatenate_videos_ffmpeg(videos_list, str(output_path))
+        return True
+    except Exception as e:
+        logger.error(f"Failed to concatenate videos: {e}")
+        return False
 
 
-def add_vignette_video(video_path, output_path):
-    os.makedirs(TEMP_DIR, exist_ok=True)
-    print(f"[INFO] Starting adding vignette for: {video_path}")
-    video_processing.add_vignette(video_path, output_path, VIGNETTE_FILE)
+def add_vignette_video(video_path, output_path) -> bool:
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        video_processing.add_vignette(video_path, output_path, "res/vignette.png")
+        Path(video_path).unlink(missing_ok=True)
+        Path(output_path).rename(video_path)
+        logger.info(f"Vignette added and original video replaced: {video_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to add vignette or replace video: {e}")
+        return False
+
+
+def monitor_gaze_stream():
+    try:
+        detector = LightweightFaceDetector(str(MODEL_PATH), str(FACE_CASCADE_PATH), str(EYE_CASCADE_PATH))
+    except IOError as e:
+        logger.error(f"Failed to initialize gaze detector: {e}")
+        return
+
+    def send_gaze_start():
+        try:
+            requests.post(f"{URL}/start_eye_contact", headers={'Authorization': f'Bearer {AUTH_TOKEN}'}, timeout=5)
+        except requests.RequestException:
+            pass
+
+    def send_gaze_end():
+        try:
+            requests.post(f"{URL}/stop_eye_contact", headers={'Authorization': f'Bearer {AUTH_TOKEN}'}, timeout=5)
+        except requests.RequestException:
+            pass
+
+    detector.set_gaze_start_callback(send_gaze_start)
+    detector.set_gaze_end_callback(send_gaze_end)
+
+    while True:
+        cap = None
+        try:
+            cap = cv2.VideoCapture(f"{URL}/get_camera_stream")
+            if not cap.isOpened():
+                raise ConnectionError("Stream failed to open")
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                detector.process_frame(frame)
+                if detector.tracking_bbox:
+                    x, y, w, h = detector.tracking_bbox
+                    color = (0, 0, 255) if detector._gaze_active else (0, 255, 0)
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+                cv2.imshow('Gaze Stream Monitor', frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    return
+        except (ConnectionError, cv2.error):
+            logger.warning("Connection lost or error reading from stream; retrying in 5 seconds.")
+        finally:
+            if cap:
+                cap.release()
+            cv2.destroyAllWindows()
+        time.sleep(5)
+
+
+def preload_videos():
+    try:
+        requests.post(f"{URL}/load_videos", headers={'Authorization': f'Bearer {AUTH_TOKEN}'})
+        logger.info("Preloaded videos on server.")
+    except requests.RequestException as e:
+        logger.error(f"Failed to preload videos: {e}")
+
+
+def call_runway(img_path) -> bool:
+    with open(img_path, 'rb') as img_file:
+        video_url = api.runway_generate_video(img_file.read())
+    if not video_processing.download_video(video_url, str(TEMP_DIR / "video_generated.mp4")):
+        logger.error("Failed to download video from runway.")
+        return False
+    if not video_processing.get_first_frame(str(TEMP_DIR / "video_generated.mp4"), str(TEMP_REMBG_DIR / "video_frame_rembg.jpg")):
+        logger.error("Failed to extract first frame from generated video.")
+        return False
+    return True
 
 
 def run_full_pipeline():
-    print("[INFO] Running full pipeline")
-    
     if not fetch_assets():
-        print("[ERROR] Could not fetch assets.")
+        logging.error("Failed to fetch assets.")
         return
-    print("[SUCCESS] Step 1/8: Fetching assets complete.")
 
-    remove_background_for_images([CAPTURE_IMG]) 
-    print("[SUCCESS] Step 2/8: Background removal complete.")
+    if not remove_background_for_images([f"{TEMP_DIR}/capture.jpg", f"{TEMP_DIR}/user_image.jpg"]):
+        logging.error("Background removal failed.")
+        return
 
-    generate_morph_wrapper()    
-    print("[SUCCESS] Step 3/8: Morphing video generation complete.")
+    if not call_runway(f"{TEMP_REMBG_DIR}/user_image_rembg.jpg"):
+        logging.error("Runway generation failed.")
+        return
+
+    if not generate_morph_wrapper():
+        logging.error("Morph generation failed.")
+        return
+
+    if not add_vignette_video(f"{TEMP_DIR}/morph_video.mp4", f"{TEMP_DIR}/final_morph_video.mp4"):
+        logging.error("Vignette addition failed for morph video.")
+        return
+
+    if not send_video(f"{TEMP_DIR}/morph_video.mp4"):
+        logging.warning("Morph video not sent.")
+        return
     
-    send_video(OUTPUT_VIDEO)
-    print("[SUCCESS] Step 4/8: Morphing video generation sent.")
+    if not reverse_video(f"{TEMP_DIR}/video_generated.mp4"):
+        logging.error("Video could not be reversed.")
+        return
 
-    reverse_video(VIDEO_AI)
-    print("[SUCCESS] Step 5/8: Video reversal complete.")
+    if not concatenate_videos([f"{TEMP_DIR}/video_generated.mp4", f"{TEMP_DIR}/reversed_video.mp4"]):
+        logging.error("Videos could not be concatenated.")
+        return
 
-    concatenate_videos([VIDEO_AI, VIDEO_REVERSED])
-    print("[SUCCESS] Step 6/8: Video concatenation complete.")
+    if not add_vignette_video(f"{TEMP_DIR}/concatenated_video.mp4", f"{TEMP_DIR}/final_concatenated_video.mp4"):
+        logging.error("Vignette addition failed for concatenated video.")
+        return
 
-    add_vignette_video(VIDEO_CONCATENATED, VIDEO_CONCATENATED_FINAL)
-    add_vignette_video(OUTPUT_VIDEO, VIDEO_MORPH_FINAL)
-    print("[SUCCESS] Step 7/8: Vignette addition complete.")
+    if not send_video(f"{TEMP_DIR}/concatenated_video.mp4"):
+        logging.warning("Concatenated video not sent.")
+        return
 
-    send_video(VIDEO_CONCATENATED)
-    print("[SUCCESS] Step 8/8: Final video sent.")
-    print("[SUCCESS] PIPELINE FINISHED SUCCESSFULLY")
+    preload_videos()
+    monitor_gaze_stream()
 
 
 # ==== MAIN ====
 
 
+COMMANDS = {
+    "fetch": fetch_assets,
+    "generate_morph": generate_morph_wrapper,
+    "send_video": lambda: send_video(sys.argv[2] if len(sys.argv) > 2 else f"{TEMP_DIR}/morph_video.mp4"),
+    "remove_background": lambda: remove_background_for_images(sys.argv[2:] if len(sys.argv) >= 3 else [f"{TEMP_DIR}/capture.jpg", f"{TEMP_DIR}/user_image.jpg"]),
+    "reverse_video": lambda: reverse_video(sys.argv[2] if len(sys.argv) > 2 else f"{TEMP_DIR}/video_generated.mp4"),
+    "concatenate_videos": lambda: concatenate_videos(sys.argv[2:] if len(sys.argv) >= 4 else [f"{TEMP_DIR}/video_generated.mp4", f"{TEMP_DIR}/reversed_video.mp4"]),
+    "add_vignette": lambda: (
+        add_vignette_video(sys.argv[2], sys.argv[3])
+        if len(sys.argv) == 4 else (
+            add_vignette_video(f"{TEMP_DIR}/concatenated_video.mp4", f"{TEMP_DIR}/final_concatenated_video.mp4"),
+            add_vignette_video(f"{TEMP_DIR}/morph_video.mp4", f"{TEMP_DIR}/final_morph_video.mp4")
+        )
+    ),
+    "monitor": monitor_gaze_stream,
+    "load_videos": preload_videos,
+}
+
 def main():
     os.makedirs(TEMP_DIR, exist_ok=True)
-
     if len(sys.argv) == 1:
         run_full_pipeline()
-
-    elif sys.argv[1] == "fetch":
-        fetch_assets()
-    
-    elif sys.argv[1] == "generate_morph":
-        required_files = [CAPTURE_REMBG, VIDEO_FRAME_REMBG]
-
-        if not all(os.path.exists(p) for p in required_files):
-            print("[ERROR] Required files for morphing not found. (pictures or shape_predictor required for face-movie)")
-            print("Please run 'fetch_assets' and 'remove_background' first.")
-        else:
-            generate_morph_wrapper()
-
-    elif sys.argv[1] == "send_video":
-        if len(sys.argv) == 3:
-            send_video(sys.argv[2])
-        else:
-            send_video(OUTPUT_VIDEO)
-            send_video(VIDEO_CONCATENATED)
-
-    elif sys.argv[1] == "remove_background":
-        if len(sys.argv) >= 3:
-            remove_background_for_images(sys.argv[2:])
-        else:
-            remove_background_for_images([CAPTURE_IMG])
-
-    elif sys.argv[1] == "reverse_video":
-        if len(sys.argv) == 3:
-            reverse_video(sys.argv[2])
-        else:
-            reverse_video(VIDEO_AI)
-
-    elif sys.argv[1] == "concatenate_videos":
-        if len(sys.argv) >= 4:
-            concatenate_videos(sys.argv[2:])
-        else:
-            concatenate_videos([VIDEO_AI, VIDEO_REVERSED])
-
-    elif sys.argv[1] == "add_vignette":
-        if len(sys.argv) == 4:
-            add_vignette_video(sys.argv[2], sys.argv[3])
-        else:
-            add_vignette_video(VIDEO_CONCATENATED, VIDEO_CONCATENATED_FINAL)
-            add_vignette_video(OUTPUT_VIDEO, VIDEO_MORPH_FINAL)
-
     else:
-        print("Usage:")
-        print("  python main.py (runs full pipeline)")
-        print("  python main.py fetch (fetches assets from server)")
-        print("  python main.py remove_background <PATH_IMG_1> <PATH_IMG_2> ...")
-        print("  python main.py generate_morph")
-        print("  python main.py reverse_video <PATH_VIDEO>")
-        print("  python main.py concatenate_videos <PATH_VIDEO_1> <PATH_VIDEO_2> ...")
-        print("  python main.py add_vignette_video <PATH_VIDEO_1> <PATH_OUTPUT> ...")
-        print("  python main.py send_video <PATH_VIDEO>")
-
+        command = sys.argv[1]
+        if command in COMMANDS:
+            COMMANDS[command]()
+        else:
+            print(f"Unknown command: {command}")
+            print("Available commands:", ", ".join(COMMANDS.keys()))
 
 if __name__ == "__main__":
     main()
