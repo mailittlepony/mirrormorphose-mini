@@ -1,0 +1,10 @@
+/*
+ * settings.css
+ * Copyright (C) 2025 stantonik
+ *
+ * Distributed under terms of the GPLv3 license.
+ */
+
+main > div {
+    margin-bottom: 20px;
+}

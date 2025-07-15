@@ -1,0 +1,25 @@
+/*
+ * index.css
+ * Copyright (C) 2025 stantonik
+ *
+ * Distributed under terms of the GPLv3 license.
+ */
+
+#experienceDiv form {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+#dropZone {
+    border: 2px dashed var(--text-muted);
+    padding: 40px;
+    text-align: center;
+    color: var(--text-muted);
+    cursor: pointer;
+    margin-top: 1em;
+}
+#dropZone.dragover {
+    background-color: var(--text-light);
+}

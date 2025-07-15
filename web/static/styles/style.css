@@ -1,0 +1,62 @@
+/*
+ * style.css
+ * Copyright (C) 2025 stantonik
+ *
+ * Distributed under terms of the GPLv3 license.
+ */
+
+:root {
+    --bg-main:       #121212;
+    --bg-surface:    #1E1E1E;
+    --primary:       #4FC3F7;
+    --secondary:     #81D4FA;
+    --text-light:    #E0E0E0;
+    --text-muted:    #9E9E9E;
+    --border-dark:   #2C2C2C;
+    --error:         #EF5350;
+    --success:       #66BB6A;
+}
+
+html, body {
+    background-color: var(--bg-main);
+    color: var(--text-light);
+    font-family: 'Space Grotesk', sans-serif;
+
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+*, *::before, *::after {
+    box-sizing: inherit;
+}
+
+main {
+    width: 100%;
+    max-width: 600px;
+    height: 100%;
+    margin: 0 auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Desktop: big side padding via parent container */
+@media (min-width: 800px) {
+    body {
+        padding: 4rem 8rem;
+    }
+}
+
+/* Mobile: small side padding */
+@media (max-width: 480px) {
+    body {
+        padding: 1rem;
+    }
+}
+
+main > div {
+    width: 100%;
+}
