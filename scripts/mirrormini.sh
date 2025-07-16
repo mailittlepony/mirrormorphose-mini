@@ -12,7 +12,7 @@ set -e
 cd "$(dirname "$0")/../"
 
 # Configuration
-RAM_SIZE_MB=64
+RAM_SIZE_MB=512
 RAMDISK_PATH="$(pwd)/ramdisk"
 
 echo "🔧 Mounting ramdisk of ${RAM_SIZE_MB}MB at $RAMDISK_PATH..."
@@ -25,10 +25,10 @@ if ! mountpoint -q "$RAMDISK_PATH"; then
 fi
 
 # Set permissions
+USER=$(pwd | cut -d '/' -f 3)
 chown -R "$USER:$USER" "$RAMDISK_PATH"
 
 # Activate virtual environment and run the app
 echo "🚀 Starting application..."
-source .venv/bin/activate
-python3 run.py
+.venv/bin/python3 run.py
 

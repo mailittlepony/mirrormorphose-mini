@@ -1,0 +1,5 @@
+vim
+build-essential
+libcamera-apps-lite
+python3-opencv
+python3-picamera2

@@ -8,9 +8,8 @@ DefaultDependencies=no
 Type=simple
 ExecStart=/bin/bash /path/to/your/project/scripts/mirrormini.sh
 WorkingDirectory=/path/to/your/project
-StandardOutput=journal
-StandardError=journal
-Restart=on-failure
+Restart=always
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target

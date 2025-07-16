@@ -8,71 +8,101 @@
 
 # Edit config.txt
 CONFIG_FILE="/boot/config.txt"
+GPU_MEM=256
+CAM_OVERLAY="ov13855"
+
+echo_cmd() {
+    # print command to terminal with '+'
+    printf '+'
+    for arg in "$@"; do
+        printf ' %q' "$arg"
+    done
+    echo
+
+    # run the command
+    "$@"
+}
+
+# Helper to append text to file with logging
+append_to_file() {
+    echo "+ echo $1 >> $2"
+    echo "$1" >> "$2"
+}
 
 # Backup original file
 cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
 echo "🗂️  Backup created at ${CONFIG_FILE}.bak"
 
-# ========== Screen config (HDMI) ==========
-read -r -d '' HDMI_SETTINGS <<EOF
-hdmi_group=2
-hdmi_mode=82
-hdmi_drive=2
-EOF
+# === Disable Headless Mode ===
+echo "🔧 Disable headless mode"
+echo_cmd sed --follow-symlinks -i '/^[[:blank:]]*max_framebuffers=/c\#max_framebuffers=2' "$CONFIG_FILE"
+echo_cmd sed --follow-symlinks -i '/^[[:blank:]]*hdmi_ignore_hotplug=/c\#hdmi_ignore_hotplug=0' "$CONFIG_FILE"
+echo_cmd sed --follow-symlinks -i '/^[[:blank:]]*enable_tvout=/c\#enable_tvout=0' "$CONFIG_FILE"
 
-echo "🔍 Removing existing HDMI settings:"
-grep '^hdmi_' "$CONFIG_FILE"
-sed -i '/^hdmi_/d' "$CONFIG_FILE"
+# === RPi OpenGL driver (vc4-kms-v3d) ===
+echo "🔧 Activate RPi driver (vc4-kms-v3d)"
+echo_cmd sed --follow-symlinks -Ei '/^[[:blank:]]*dtoverlay=vc4-f?kms-v3d/d' "$CONFIG_FILE"
+append_to_file "dtoverlay=vc4-kms-v3d,noaudio" "$CONFIG_FILE"
 
-echo "➕ Adding HDMI settings:"
-echo "$HDMI_SETTINGS"
-echo "$HDMI_SETTINGS" >> "$CONFIG_FILE"
-
-# ========== Camera config ==========
-if ! grep -q '^dtoverlay=ov13855' "$CONFIG_FILE"; then
-    echo "➕ Adding camera overlay: dtoverlay=ov13855"
-    echo "dtoverlay=ov13855" >> "$CONFIG_FILE"
+# === GPU Memory Split ===
+echo "🔧 Change GPU memory to $GPU_MEM"
+if grep -q '^gpu_mem_256=' "$CONFIG_FILE"; then
+    echo_cmd sed --follow-symlinks -i "s/^gpu_mem_256=.*/gpu_mem_256=$GPU_MEM/" "$CONFIG_FILE"
 else
-    echo "✅ Camera overlay already present: dtoverlay=ov13855"
+    append_to_file "gpu_mem_256=$GPU_MEM" "$CONFIG_FILE"
+fi
+if grep -q '^gpu_mem_512=' "$CONFIG_FILE"; then
+    echo_cmd sed --follow-symlinks -i "s/^gpu_mem_512=.*/gpu_mem_512=$GPU_MEM/" "$CONFIG_FILE"
+else
+    append_to_file "gpu_mem_512=$GPU_MEM" "$CONFIG_FILE"
+fi
+if grep -q '^gpu_mem_1024=' "$CONFIG_FILE"; then
+    echo_cmd sed --follow-symlinks -i "s/^gpu_mem_1024=.*/gpu_mem_1024=$GPU_MEM/" "$CONFIG_FILE"
+else
+    append_to_file "gpu_mem_1024=$GPU_MEM" "$CONFIG_FILE"
 fi
 
-# ========== GPU config ==========
-echo "🔍 Removing existing GPU memory settings:"
-grep '^gpu_mem=' "$CONFIG_FILE"
-sed -i '/^gpu_mem=/d' "$CONFIG_FILE"
+# === Enable RPi codec and camera ===
+echo "🔧 Enable RPi codec and camera"
+echo_cmd rm -f /etc/modprobe.d/dietpi-disable_vcsm.conf
+echo_cmd rm -f /etc/modprobe.d/dietpi-disable_rpi_codec.conf
+echo_cmd rm -f /etc/modprobe.d/dietpi-disable_rpi_camera.conf
 
-echo "➕ Adding GPU memory setting: gpu_mem=1024"
-echo "gpu_mem=1024" >> "$CONFIG_FILE"
+if grep -q '^#start_x=' "$CONFIG_FILE"; then
+    echo_cmd sed --follow-symlinks -i 's/^#start_x=.*/start_x=1/' "$CONFIG_FILE"
+elif grep -q '^start_x=' "$CONFIG_FILE"; then
+    echo_cmd sed --follow-symlinks -i 's/^start_x=.*/start_x=1/' "$CONFIG_FILE"
+else
+    append_to_file "start_x=1" "$CONFIG_FILE"
+fi
 
-echo "✅ '$CONFIG_FILE' successfully updated!"
+if ! grep -q "^dtoverlay=$CAM_OVERLAY" "$CONFIG_FILE"; then
+    append_to_file "dtoverlay=$CAM_OVERLAY" "$CONFIG_FILE"
+fi
 
-# Edit cmdline.txt
-CMDLINE_FILE="/boot/cmdline.txt"
+# === HDMI config ===
+echo "🔧 Setting up custom HDMI for the screen"
+read -r -d '' HDMI_SETTINGS <<EOF
+hdmi_force_hotplug=1
+hdmi_group=2
+hdmi_mode=87
+hdmi_timings=1080 0 48 6 25 1920 0 8 2 4 0 0 0 59 0 134490000 0
+framebuffer_width=1080
+framebuffer_height=1920
+EOF
 
-# Backup first
-cp "$CMDLINE_FILE" "${CMDLINE_FILE}.bak"
-echo "🗂️  Backup created at ${CMDLINE_FILE}.bak"
+while IFS= read -r HDMI_LINE; do
+    # Skip empty lines or comments in the list
+    [[ -z "$HDMI_LINE" || "$HDMI_LINE" == \#* ]] && continue
 
-# Read original line
-ORIGINAL_CMDLINE=$(cat "$CMDLINE_FILE")
+    KEY=$(echo "$HDMI_LINE" | cut -d= -f1)
 
-# Clean it:
-# - Remove console=... entries
-# - Remove splash, loglevel=..., fbcon=..., etc.
-# - Keep root=, rootwait, and other essential flags
-CLEANED_CMDLINE=$(echo "$ORIGINAL_CMDLINE" | \
-    sed -E 's/console=[^ ]+//g' | \
-    sed -E 's/loglevel=[^ ]+//g' | \
-    sed -E 's/splash//g' | \
-    sed -E 's/fbcon=[^ ]+//g' | \
-    sed -E 's/\s+/ /g' | \
-    sed -E 's/^\s+|\s+$//g')
+    if grep -Eq "^[[:space:]]*#?[[:space:]]*$KEY=" "$CONFIG_FILE"; then
+        echo_cmd sed --follow-symlinks -i -E "s|^[[:space:]]*#?[[:space:]]*$KEY=.*|$HDMI_LINE|" "$CONFIG_FILE"
+    else
+        append_to_file "$HDMI_LINE" "$CONFIG_FILE"
+    fi
+done <<< "$HDMI_SETTINGS"
 
-# Add quiet mode and hide cursor
-CLEANED_CMDLINE="${CLEANED_CMDLINE} quiet vt.global_cursor_default=0"
-
-# Update the file
-echo "$CLEANED_CMDLINE" > "$CMDLINE_FILE"
-
-echo "✅ '$CMDLINE_FILE' cleaned!"
+echo "✅ Hardware settings updated successfully. Please reboot."
 
