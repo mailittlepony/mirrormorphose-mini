@@ -6,7 +6,8 @@
 # Distributed under terms of the MIT license.
 
 """
-This script processes the video.
+Video processing utilities including reversing, concatenation, vignette,
+frame extraction, download.
 """
 
 import os
@@ -15,8 +16,8 @@ import cv2
 import numpy as np
 from pathlib import Path
 import subprocess
+from typing import List
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def reverse_video_from_path(input_video_path: str, output_video_path: str) -> bool:
@@ -49,7 +50,7 @@ def reverse_video_from_path(input_video_path: str, output_video_path: str) -> bo
         logger.error(f"Failed to reverse video: {e}")
         return False
 
-def concatenate_videos_ffmpeg(video_paths: list, output_path: str) -> bool:
+def concatenate_videos_ffmpeg(video_paths: List[str], output_path: str) -> bool:
     try:
         list_file = Path("concat_list.txt")
         with list_file.open("w") as f:
@@ -160,116 +161,3 @@ def download_video(url: str, output_path: str) -> bool:
         logger.error(f"Failed to download video: {e}")
         return False
 
-
-def generate_morph_specialized(
-    images_path,
-    capture_rembg_path, 
-    video_frame_rembg_path, 
-    output_video_path,
-    align_script_path, 
-    morph_script_path, 
-    aligned_dir, 
-    temp_dir, 
-    transition_dur, 
-    pause_dur, 
-    fps
-):
-    """
-    Generates a morph video with custom cropping, resizing, and alignment.
-    This version is corrected to handle the external script's behavior.
-    """
-    if not all(os.path.exists(p) for p in [capture_rembg_path, video_frame_rembg_path]):
-        logging.error("One or more input files for morphing not found.")
-        return False
-    
-    os.makedirs(aligned_dir, exist_ok=True)
-    os.makedirs(temp_dir, exist_ok=True)
-    
-    try:
-        logging.info("Aligning background-removed faces...")
-        align_command = [
-            "python", align_script_path,
-            "-images", images_path,
-            "-target", video_frame_rembg_path,
-            "-overlay",
-            "-outdir", aligned_dir
-        ]
-        subprocess.run(align_command, check=True, capture_output=True, text=True)
-        logging.info("Face alignment completed.")
-    except FileNotFoundError:
-        logging.error(f"Alignment script not found at '{align_script_path}'. Please check the path.")
-        return False
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Face alignment failed: {e.stderr}")
-        return False
-        
-    base_capture_name = os.path.basename(capture_rembg_path)
-    base_frame_name = os.path.basename(video_frame_rembg_path)
-
-    aligned_capture_name = base_capture_name
-    aligned_frame_name = base_frame_name
-
-    aligned_capture_path = os.path.join(aligned_dir, aligned_capture_name)
-    aligned_frame_path = os.path.join(aligned_dir, aligned_frame_name)
-    
-    logging.debug(f"Checking for aligned files: {aligned_capture_path}, {aligned_frame_path}")
-    
-    if not all(os.path.exists(p) for p in [aligned_capture_path, aligned_frame_path]):
-        logging.error("Aligned images were not created by the script with the expected names.")
-        if os.path.exists(aligned_dir):
-            logging.debug(f"Contents of '{aligned_dir}': {os.listdir(aligned_dir)}")
-        return False
-
-    target_frame = cv2.imread(video_frame_rembg_path)
-    target_h, target_w = target_frame.shape[:2]
-    logging.info(f"Target resolution for morph is {target_w}x{target_h}.")
-
-    aligned_capture_img = cv2.imread(aligned_capture_path)
-    canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
-    ac_h, ac_w = aligned_capture_img.shape[:2]
-    paste_x = (target_w - ac_w) // 2
-    paste_y = (target_h - ac_h) // 2
-    src_x_start = max(0, -paste_x)
-    src_y_start = max(0, -paste_y)
-    dst_x_start = max(0, paste_x)
-    dst_y_start = max(0, paste_y)
-    paste_w = min(ac_w - src_x_start, target_w - dst_x_start)
-    paste_h = min(ac_h - src_y_start, target_h - dst_y_start)
-    canvas[dst_y_start:dst_y_start+paste_h, dst_x_start:dst_x_start+paste_w] = \
-        aligned_capture_img[src_y_start:src_y_start+paste_h, src_x_start:src_x_start+paste_w]
-    final_capture_path = os.path.join(temp_dir, "morph_input_1.jpg")
-    cv2.imwrite(final_capture_path, canvas)
-
-    aligned_frame_img = cv2.imread(aligned_frame_path)
-    resized_frame_img = cv2.resize(aligned_frame_img, (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
-    final_frame_path = os.path.join(temp_dir, "morph_input_2.jpg")
-    cv2.imwrite(final_frame_path, resized_frame_img)
-    
-    final_morph_input_dir = os.path.join(temp_dir, "final_morph_inputs")
-    os.makedirs(final_morph_input_dir, exist_ok=True)
-    for f in os.listdir(final_morph_input_dir):
-        os.remove(os.path.join(final_morph_input_dir, f))
-    os.rename(final_capture_path, os.path.join(final_morph_input_dir, "01_capture.jpg"))
-    os.rename(final_frame_path, os.path.join(final_morph_input_dir, "02_frame.jpg"))
-    
-    try:
-        logging.info("Generating final morphing video...")
-        morph_command = [
-            "python", morph_script_path,
-            "-morph",
-            "-images", final_morph_input_dir, 
-            "-td", str(transition_dur),
-            "-pd", str(pause_dur),
-            "-fps", str(fps),
-            "-out", output_video_path
-        ]
-        subprocess.run(morph_command, check=True, capture_output=True, text=True)
-        logging.info(f"Morphing video created: {output_video_path}")
-    except FileNotFoundError:
-        logging.error(f"Morphing script not found at '{morph_script_path}'. Please check the path.")
-        return False
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Final morphing process failed: {e.stderr}")
-        return False
-
-    return True
