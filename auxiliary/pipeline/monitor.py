@@ -15,6 +15,7 @@ from face_recognition import LightweightFaceDetector
 
 logger = logging.getLogger(__name__)
 
+
 def monitor_gaze_stream() -> None:
     try:
         detector = LightweightFaceDetector(

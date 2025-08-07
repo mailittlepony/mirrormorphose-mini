@@ -17,7 +17,10 @@ from pipeline.monitor import monitor_gaze_stream
 from pipeline.control import run_full_pipeline
 from pipeline.morph_wrapper import generate_morph_specialized
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO, 
+    format="%(levelname)s:%(name)s:%(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -83,12 +86,6 @@ def get_parser() -> argparse.ArgumentParser:
         default=str(TEMP_DIR / "concatenated_video.mp4"),
         help="Input video path",
     )
-    vignette_parser.add_argument(
-        "output",
-        nargs="?",
-        default=str(TEMP_DIR / "final_concatenated_video.mp4"),
-        help="Output video path",
-    )
 
     return parser
 
@@ -115,7 +112,7 @@ def main():
     elif args.command == "remove_background":
         remove_background_for_images(args.images)
     elif args.command == "add_vignette":
-        add_vignette_video(args.input, args.output)
+        add_vignette_video(args.input)
     elif args.command == "monitor":
         monitor_gaze_stream()
     elif args.command == "load_videos":

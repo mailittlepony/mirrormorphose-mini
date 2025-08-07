@@ -20,6 +20,7 @@ from pipeline.postprocess import extract_first_frame
 
 logger = logging.getLogger(__name__)
 
+
 def generate_morph_specialized(
     runway: bool = True,
     transition_dur: float = 1.5,

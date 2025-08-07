@@ -18,6 +18,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
 def refine_edges(image_with_alpha: Image.Image) -> Image.Image:
     """
     Applies Gaussian blur to the alpha channel for smoother edges.
@@ -31,6 +32,7 @@ def add_black_background(image_with_alpha: Image.Image) -> Image.Image:
     black_bg = Image.new("RGBA", image_with_alpha.size, (0, 0, 0, 255))
     black_bg.paste(image_with_alpha, (0, 0), image_with_alpha)
     return black_bg
+
 
 def remove_background(input_path: str, output_path: str) -> bool:
     try:

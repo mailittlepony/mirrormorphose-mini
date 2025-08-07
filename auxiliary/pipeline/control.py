@@ -32,7 +32,6 @@ def run_full_pipeline(runway: bool = True) -> None:
 
     if not add_vignette_video(
         str(TEMP_DIR / "morph_video.mp4"),
-        str(TEMP_DIR / "final_morph_video.mp4")
     ):
         logger.error("Vignette addition failed for morph video.")
         return
@@ -54,7 +53,6 @@ def run_full_pipeline(runway: bool = True) -> None:
 
     if not add_vignette_video(
         str(TEMP_DIR / "concatenated_video.mp4"),
-        str(TEMP_DIR / "final_concatenated_video.mp4")
     ):
         logger.error("Vignette addition failed for concatenated video.")
         return

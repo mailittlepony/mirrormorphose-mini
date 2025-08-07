@@ -18,6 +18,7 @@ from config import TEMP_REMBG_DIR
 
 logger = logging.getLogger(__name__)
 
+
 def remove_background_for_images(image_paths: List[str]) -> bool:
     os.makedirs(TEMP_REMBG_DIR, exist_ok=True)
     all_success = True
@@ -39,14 +40,9 @@ def call_runway(img_path: str) -> bool:
         video_url = runway_generate_video(img_file.read())
 
     video_path = TEMP_DIR / "video_generated.mp4"
-    frame_output = TEMP_REMBG_DIR / "video_frame_rembg.jpg"
 
     if not video_processing.download_video(video_url, str(video_path)):
         logger.error("Failed to download video from runway.")
-        return False
-
-    if not video_processing.get_first_frame(str(video_path), str(frame_output)):
-        logger.error("Failed to extract first frame from generated video.")
         return False
 
     return True
@@ -76,42 +72,24 @@ def crop_faces(images_dir: Path, temp_dir: Path) -> tuple[Path, Path] | None:
     return cropped_capture_path, cropped_user_path
 
 
-
-
 def resize_and_crop_to_match(source_img: Image.Image, target_img: Image.Image) -> Image.Image:
-    """
-    Resize and crop source_img to match target_img's size,
-    assuming the face is centered and must stay centered after scaling.
-
-    Parameters:
-        source_img (PIL.Image.Image): Image to scale and crop.
-        target_img (PIL.Image.Image): Reference image with desired size and alignment.
-
-    Returns:
-        PIL.Image.Image: Resized and cropped source image.
-    """
     src_w, src_h = source_img.size
     tgt_w, tgt_h = target_img.size
 
-    # Scale up to fill the target completely (no padding)
     scale = max(tgt_w / src_w, tgt_h / src_h)
     new_w = int(src_w * scale)
     new_h = int(src_h * scale)
     resized = source_img.resize((new_w, new_h), Image.LANCZOS)
 
-    # Use center point of the original image as anchor
     face_x = src_w / 2
     face_y = src_h / 2
 
-    # Map to new scaled image
     face_x_scaled = face_x * scale
     face_y_scaled = face_y * scale
 
-    # Crop to keep face at same location
     crop_x = int(face_x_scaled - tgt_w / 2)
     crop_y = int(face_y_scaled - tgt_h / 2)
 
-    # Ensure crop stays within bounds
     crop_x = max(0, min(crop_x, new_w - tgt_w))
     crop_y = max(0, min(crop_y, new_h - tgt_h))
 

@@ -20,13 +20,15 @@ from typing import List
 
 logger = logging.getLogger(__name__)
 
+
 def reverse_video_from_path(input_video_path: str, output_video_path: str) -> bool:
     try:
         cap = cv2.VideoCapture(input_video_path)
         if not cap.isOpened():
             logger.error(f"Cannot open video {input_video_path}")
             return False
-        
+
+        fps = cap.get(cv2.CAP_PROP_FPS) or 25
         frames = []
         while True:
             ret, frame = cap.read()
@@ -34,11 +36,15 @@ def reverse_video_from_path(input_video_path: str, output_video_path: str) -> bo
                 break
             frames.append(frame)
         cap.release()
-        
+
+        if not frames:
+            logger.error("No frames were read from the video.")
+            return False
+
         frames.reverse()
-        height, width, layers = frames[0].shape
+        height, width = frames[0].shape[:2]
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_video_path, fourcc, 25, (width, height))
+        out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
         for frame in frames:
             out.write(frame)
@@ -46,38 +52,51 @@ def reverse_video_from_path(input_video_path: str, output_video_path: str) -> bo
 
         logger.info(f"Video reversed and saved to {output_video_path}")
         return True
+
     except Exception as e:
         logger.error(f"Failed to reverse video: {e}")
         return False
 
-def concatenate_videos_ffmpeg(video_paths: List[str], output_path: str) -> bool:
+
+def concatenate_videos_ffmpeg(video_paths: list, output_path: str) -> bool:
     try:
-        list_file = Path("concat_list.txt")
-        with list_file.open("w") as f:
-            for video_path in video_paths:
-                f.write(f"file '{video_path}'\n")
-        
+        if not video_paths:
+            logger.error("No videos to concatenate.")
+            return False
+
+        input_args = []
+        for vp in video_paths:
+            input_args += ['-i', vp]
+
+        n = len(video_paths)
+        filter_complex = "".join(f"[{i}:v:0]" for i in range(n))
+        filter_complex += f"concat=n={n}:v=1:a=0[outv]"
+
         cmd = [
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-            "-i", str(list_file),
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-            "-c:a", "aac",
+            "ffmpeg", "-y",
+            *input_args,
+            "-filter_complex", filter_complex,
+            "-map", "[outv]",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
             output_path
         ]
 
-        logger.info("Concatenating videos with ffmpeg...")
+        logger.info(f"Concatenating {n} videos with ffmpeg concat filter...")
         result = subprocess.run(cmd, capture_output=True, text=True)
-        list_file.unlink(missing_ok=True)
 
         if result.returncode != 0:
-            logger.error(f"FFmpeg concat failed: {result.stderr}")
+            logger.error(f"FFmpeg concat filter failed: {result.stderr}")
             return False
 
         logger.info(f"Videos concatenated successfully to {output_path}")
         return True
+
     except Exception as e:
         logger.error(f"Error concatenating videos: {e}")
         return False
+
 
 def add_vignette(video_path: str, output_path: str, vignette_image_path: str) -> bool:
     try:
@@ -127,25 +146,6 @@ def add_vignette(video_path: str, output_path: str, vignette_image_path: str) ->
         logger.error(f"Failed to add vignette: {e}")
         return False
 
-def get_first_frame(video_path: str, output_image_path: str) -> bool:
-    try:
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            logger.error(f"Cannot open video {video_path}")
-            return False
-        
-        ret, frame = cap.read()
-        cap.release()
-        if not ret:
-            logger.error("Failed to read first frame")
-            return False
-        
-        cv2.imwrite(output_image_path, frame)
-        logger.info(f"First frame extracted and saved to {output_image_path}")
-        return True
-    except Exception as e:
-        logger.error(f"Error extracting first frame: {e}")
-        return False
 
 def download_video(url: str, output_path: str) -> bool:
     import requests

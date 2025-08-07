@@ -11,12 +11,17 @@ from config import FACE_CASCADE_PATH
 
 logger = logging.getLogger(__name__)
 
+
 class TrackerManager:
     def __init__(self, detection_interval=10):
         self._tracker = None
         self._bbox = None
         self._frame_counter = 0
         self._detection_interval = detection_interval
+    
+    @property
+    def bbox(self):
+        return self._bbox
 
     def has_valid_bbox(self):
         return self._bbox is not None
@@ -25,7 +30,7 @@ class TrackerManager:
         return self._frame_counter % self._detection_interval == 0
 
     def start_tracking(self, frame, bbox):
-        self._tracker = cv2.TrackerKCF_create()
+        self._tracker = cv2.legacy.TrackerKCF_create()
         self._tracker.init(frame, bbox)
         self._bbox = bbox
 

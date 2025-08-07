@@ -11,6 +11,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def extract_eye_data(frame, face_bbox, eye_cascade, input_shape):
     fx, fy, fw, fh = face_bbox
     face_color = frame[fy:fy+fh, fx:fx+fw]
@@ -46,6 +47,7 @@ def extract_eye_data(frame, face_bbox, eye_cascade, input_shape):
         "left_eye_gray": eye_imgs_gray[0],
         "right_eye_gray": eye_imgs_gray[1],
     }
+
 
 def estimate_gaze_direction(eye_gray):
     if eye_gray is None or eye_gray.size == 0:

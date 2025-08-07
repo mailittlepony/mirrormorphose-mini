@@ -12,6 +12,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
 def align_faces(
     images_dir: Path,
     target_path: Path,

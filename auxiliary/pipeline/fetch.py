@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 def fetch_assets() -> bool:
     headers = {'Authorization': f'Bearer {AUTH_TOKEN}'}
+    print(f"Using AUTH_TOKEN: {AUTH_TOKEN}")
     try:
         resp = requests.post(f"{URL}/get_camera_capture", headers=headers)
         resp.raise_for_status()
@@ -60,10 +61,17 @@ def send_video(video_path: str) -> bool:
             return False
 
 
-def preload_videos() -> None:
+def preload_videos() -> bool:
     try:
-        requests.post(f"{URL}/load_videos", headers={'Authorization': f'Bearer {AUTH_TOKEN}'})
+        response = requests.post(
+            f"{URL}/load_videos",
+            headers={'Authorization': f'Bearer {AUTH_TOKEN}'}
+        )
+        response.raise_for_status()
         logger.info("Preloaded videos on server.")
+        return True
     except requests.RequestException as e:
         logger.error(f"Failed to preload videos: {e}")
+        return False
+
 

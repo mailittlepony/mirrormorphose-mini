@@ -73,11 +73,18 @@ class LightweightFaceDetector:
         self._start_stare = None
         self._lookaway_start = None
 
+    @property
+    def tracking_bbox(self):
+        return self._tracker.bbox
+
     def _detect_faces(self, gray):
         return self._face_cascade.detectMultiScale(gray, 1.1, 5)
 
     def _select_closest_face(self, faces):
-        return max(faces, key=lambda f: f[2] * f[3]) if faces else None
+        if len(faces) > 0:
+            return max(faces, key=lambda f: f[2] * f[3])
+        else:
+            return None
 
     def process_frame(self, frame):
         current_time = time.time()

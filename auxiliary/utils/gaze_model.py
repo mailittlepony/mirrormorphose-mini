@@ -15,6 +15,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
 class GazeModel:
     def __init__(self, model_path, input_shape, class_labels):
         self._interpreter = Interpreter(model_path=model_path)

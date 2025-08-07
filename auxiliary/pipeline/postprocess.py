@@ -14,6 +14,7 @@ import utils.video_processing as video_processing
 
 logger = logging.getLogger(__name__)
 
+
 def reverse_video(video_path: str) -> bool:
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     output_path = TEMP_DIR / "reversed_video.mp4"
@@ -23,6 +24,7 @@ def reverse_video(video_path: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to reverse video: {e}")
         return False
+
 
 def concatenate_videos(videos_list: List[str]) -> bool:
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -37,17 +39,19 @@ def concatenate_videos(videos_list: List[str]) -> bool:
         logger.error(f"Failed to concatenate videos: {e}")
         return False
 
-def add_vignette_video(video_path: str, output_path: str) -> bool:
+def add_vignette_video(video_path: str) -> bool:
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        video_processing.add_vignette(video_path, output_path, str(VIGNETTE_PATH))
+        temp_output_path = str(TEMP_DIR / "vignette_temp_output.mp4")
+        video_processing.add_vignette(video_path, temp_output_path, str(VIGNETTE_PATH))
         Path(video_path).unlink(missing_ok=True)
-        Path(output_path).rename(video_path)
+        Path(temp_output_path).rename(video_path)
         logger.info(f"Vignette added and original video replaced: {video_path}")
         return True
     except Exception as e:
         logger.error(f"Failed to add vignette or replace video: {e}")
         return False
+
 
 def extract_first_frame(video_path: str, output_image_path: str) -> bool:
     import cv2
