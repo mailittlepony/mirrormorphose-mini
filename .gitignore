@@ -7,3 +7,8 @@ shape_predictor_68_face_landmarks.dat
 __pycache__
 .python-version
 ramdisk
+
+# Kicad
+*.kicad_prl
+*backups
+fp-info-cache

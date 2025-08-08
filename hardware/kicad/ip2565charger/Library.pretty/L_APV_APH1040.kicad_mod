@@ -1,0 +1,232 @@
+(footprint "L_APV_APH1040"
+	(version 20241229)
+	(generator "pcbnew")
+	(generator_version "9.0")
+	(layer "F.Cu")
+	(descr "Inductor, APV, APH1040, 10.8x10.0x3.8mm, (http://en.apvind.com/public/upload/20240408/996aafa961154ed753e4983e7eb80fa7.pdf), generated with kicad-footprint-generator gen_inductor.py")
+	(tags "Inductor molded power shielded")
+	(property "Reference" "REF**"
+		(at 0 -0.127 0)
+		(layer "F.SilkS")
+		(uuid "7b649949-326a-4d76-836e-e9f723cf5878")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "10u"
+		(at 0 6 0)
+		(layer "F.Fab")
+		(uuid "bc47b447-caae-469c-8fa3-d3cfa9d81147")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "d18256e6-2cfc-446d-9742-48aeb25f7f92")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" "Inductor"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "33ada598-362f-48ec-8477-701c3ac6e6ce")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd)
+	(fp_line
+		(start -5.66 -5.26)
+		(end -5.66 -2.31)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "281f2ff5-1015-4b2b-8536-a33e53c3fb5e")
+	)
+	(fp_line
+		(start -5.66 -5.26)
+		(end 5.66 -5.26)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "f427ad45-cb62-4ce5-830e-5b9298d0b143")
+	)
+	(fp_line
+		(start -5.66 5.26)
+		(end -5.66 2.31)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "3d65b3a5-f979-464f-9687-def26793de5e")
+	)
+	(fp_line
+		(start -5.66 5.26)
+		(end 5.66 5.26)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "b9fd567f-f39e-43fb-b6cc-892c7cd97f9b")
+	)
+	(fp_line
+		(start 5.66 -5.26)
+		(end 5.66 -2.31)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "d1c87d0f-cc9c-4145-ad3a-e1a376aecdea")
+	)
+	(fp_line
+		(start 5.66 5.26)
+		(end 5.66 2.31)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "bf60d9e7-c58c-4525-8644-32b99cd4be72")
+	)
+	(fp_line
+		(start -7.05 -5.25)
+		(end -7.05 5.25)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "3f68cf83-9f83-4cf3-a1e0-e41ef6f55ddb")
+	)
+	(fp_line
+		(start -7.05 5.25)
+		(end 7.05 5.25)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "e9497acc-f78a-415e-bdcc-17916930cf9b")
+	)
+	(fp_line
+		(start 7.05 -5.25)
+		(end -7.05 -5.25)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "db9f7ab2-1cd3-4373-94c5-1fb87165243c")
+	)
+	(fp_line
+		(start 7.05 5.25)
+		(end 7.05 -5.25)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "ff6f99a1-65fc-413e-b328-6d8f92685d8e")
+	)
+	(fp_line
+		(start -5.4 -5)
+		(end -5.4 5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "d3fb0b0b-3797-4bd1-9305-91562a2a15bf")
+	)
+	(fp_line
+		(start -5.4 5)
+		(end 5.4 5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "580b26a2-d20e-4c58-85e0-38ceecbc5714")
+	)
+	(fp_line
+		(start 5.4 -5)
+		(end -5.4 -5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "d7891b7c-3528-471d-8318-d33340fa6c2c")
+	)
+	(fp_line
+		(start 5.4 5)
+		(end 5.4 -5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "12ee96c8-dc8f-4d33-aadc-a04bbb39aa09")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(uuid "97d83967-e97d-4cfa-9cdd-48d7b3f4fa2e")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" smd roundrect
+		(at -4.75 0)
+		(size 3 4.1)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.060976)
+		(uuid "3e951143-ed20-4751-8583-0e9d1aa5ab24")
+	)
+	(pad "2" smd roundrect
+		(at 4.75 0)
+		(size 3 4.1)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.060976)
+		(uuid "f123ff37-9dee-4d8a-b11a-65291f5919ab")
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/3dmodels/L_APV_APH1040.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+)
