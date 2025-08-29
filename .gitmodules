@@ -1,0 +1,3 @@
+[submodule "app/core/camera/gaze_tracker"]
+	path = app/core/camera/gaze_tracker
+	url = https://github.com/mailittlepony/gaze_tracker

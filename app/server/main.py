@@ -8,7 +8,7 @@
 from http.server import ThreadingHTTPServer
 
 from .http_handler import MirrorHTTPRequestHandler
-from .config import HTTP_PORT
+from ..config import HTTP_PORT
 
 def run_server():
     global httpd

@@ -10,9 +10,6 @@ from mimetypes import guess_type
 from urllib.parse import unquote
 import os
 
-from . import config
-
-
 class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         routes = { 
