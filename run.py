@@ -5,7 +5,7 @@
 #
 # Distributed under terms of the GPLv3 license.
 
-from app.server.main import run_server
+from app.main import run
 
 if __name__ == "__main__":
-    run_server()
+    run()

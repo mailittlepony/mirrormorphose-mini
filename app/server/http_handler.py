@@ -8,11 +8,14 @@
 from http.server import BaseHTTPRequestHandler
 from mimetypes import guess_type
 from urllib.parse import unquote
-import os
+import os, cv2, time
+
+from ..core.camera import camera
 
 class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         routes = { 
+            "/api/debug/camera/stream.mjpeg": self._handle_mjpeg_stream
         }
         handler = routes.get(self.path)
         if handler:
@@ -32,6 +35,31 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
     """
     GET Handlers
     """
+    def _handle_mjpeg_stream(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'multipart/x-mixed-replace; boundary=frame')
+        self.end_headers()
+
+        try:
+            while True:
+                frame = camera.read(preview=True)
+                if frame is None:
+                    continue
+                # Encode frame as JPEG
+                ret, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                if not ret:
+                    continue
+                self.wfile.write(b"--frame\r\n")
+                self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                self.wfile.write(f"Content-Length: {len(jpeg)}\r\n\r\n".encode())
+                self.wfile.write(jpeg.tobytes())
+                self.wfile.write(b"\r\n")
+                time.sleep(0.01)
+        except BrokenPipeError:
+            print("Client disconnected")
+
+
+
     def _serve_direct_file(self, base_dir):
         request_path = unquote(self.path)
         if request_path == "/":
