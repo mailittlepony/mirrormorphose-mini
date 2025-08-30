@@ -5,16 +5,18 @@
 #
 # Distributed under terms of the GPLv3 license.
 
+from typing import Optional
+
+import numpy as np
 from runwayml import RunwayML, TaskFailedError
-from os import getenv
 from base64 import b64encode
 
-import app.config as cfg
+from app.config import RUNWAY_AUTH_TOKEN
 
 test_video = True
-runway_client = RunwayML(api_key=cfg.RUNWAY_AUTH_TOKEN)
+runway_client = RunwayML(api_key=RUNWAY_AUTH_TOKEN)
 
-def runway_generate_video(img):
+def generate_video(img: np.ndarray) -> Optional[str]:
     try:
         base64_jpg = b64encode(img).decode("utf-8")
         data_uri = f"data:image/jpeg;base64,{base64_jpg}"

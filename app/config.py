@@ -35,13 +35,15 @@ CAMERA_FULL_FORMAT = 'UYVY'
 
 # Face detection/recognition
 MODEL_DIR = Path("app/res/models")
-FACE_CASCADE_PATH = MODEL_DIR/"haarcascade_frontalface_default.xml"
-EYE_CASCADE_PATH = MODEL_DIR/"haarcascade_eye_tree_eyeglasses.xml"
 
 # Display
 SHADER_DIR = Path("app/core/display/shaders")
 
 # Morph
-TEMP_REMBG_DIR = TEMP_DIR/"tmp_rembg"
+USER_CAPTURE_PATH= TEMP_DIR/"user_capture.jpg"
+USER_CHILD_PATH = TEMP_DIR/"user_child.jpg"
+MORPH_TMP_DIR = TEMP_DIR/"morph_tmp"
+GENERATED_VIDEO_PATH = TEMP_DIR/"generated_video.mp4"
+MORPH_VIDEO_PATH = TEMP_DIR/"morph_video.mp4"
 FACE_MOVIE_FACE_ALIGN_SCRIPT = Path("app/core/morph/face-movie/face-movie/align.py")
 FACE_MOVIE_MORPH_SCRIPT = Path("app/core/morph/face-movie/face-movie/main.py")
