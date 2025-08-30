@@ -140,7 +140,7 @@ def concatenate_videos(inputs: List[Union[str, Path]],
     try:
         (
             ffmpeg
-            .concat(*streams, v=1, a=1)  # concatenate video+audio
+            .concat(*streams, v=1, a=0)
             .output(str(tmp_output))
             .overwrite_output()
             .run(quiet=True, capture_stdout=True, capture_stderr=True)

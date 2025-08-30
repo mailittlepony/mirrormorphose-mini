@@ -13,6 +13,7 @@ import os, cv2, time
 from app.core import experience
 
 from ..core.camera import camera
+from ..core import experience
 
 class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -49,6 +50,9 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
                 frame = camera.read(preview=True)
                 if frame is None:
                     continue
+                tracker = experience.get_tracker()
+                if tracker is not None:
+                    frame = tracker.draw_bbox(frame, "")
                 # Encode frame as JPEG
                 ret, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
                 if not ret:
@@ -98,12 +102,12 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
         try:
             if state == "start":
                 experience.start()
+                self._send_response_str(200, "Experience started succesfully.")
             elif state == "stop":
                 experience.stop()
+                self._send_response_str(200, "Experience finished succesfully.")
         except Exception as e:
             self._send_response_str(500, f"Experience crashed : {e}")
-
-        self._send_response_str(200, "Experience started succesfully.")
 
     """
     Helpers

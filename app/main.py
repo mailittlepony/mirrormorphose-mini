@@ -29,41 +29,52 @@ def run():
     print("Mirrormorphose-mini program v1.0")
     print("[INFO] Starting...")
 
-    # command_queue = queue.Queue()
     try:
         # Module initialization
         server.run_async()
         camera.init()
         display.init()
-        tracker = experience.get_tracker()
+
+        # Gaze detection
+        is_gaze = False
+        last_change_time = 0
+        debounce_seconds = 0.5
+        gaze_stable_start = 0.0
+        min_stable_duration = 2.0
 
         while running:
             start = time.time()
-
-            # try:
-            #     command = command_queue.get_nowait()
-            # except queue.Empty:
-            #     command = None
-
-            # if command == "START_EXPERIENCE":
-            #     tracker = experience.start()
-            # elif command == "STOP_EXPERIENCE":
-            #     experience.stop()
 
             # Start of Main Loop
 
             camera.capture(preview=False)
             camera.capture(preview=True)
 
+            tracker = experience.get_tracker()
             if tracker:
-                state = tracker.get_eye_state(camera.read(preview=True))
-                print(state)
-                if (state == "straight"):
-                    if not display.is_playing:
+                frame = camera.read(preview=True)
+                state = tracker.get_eye_state(frame)
+                # print(state)
+                if state in ("straight", "down"):
+                    if gaze_stable_start == 0.0:
+                        # first frame of potential gaze
+                        gaze_stable_start = start
+
+                    # only start gaze if stable duration reached
+                    if not is_gaze and (start - gaze_stable_start) >= min_stable_duration:
+                        is_gaze = True
+                        print("Gaze started")
                         display.play()
                 else:
-                    if display.is_playing:
-                        display.stop()
+                    # reset stable timer if gaze lost or other state
+                    gaze_stable_start = 0.0
+                    if is_gaze and state != "blinking":
+                        # normal debounce for ending gaze
+                        if (start - last_change_time) >= debounce_seconds:
+                            is_gaze = False
+                            last_change_time = start
+                            print("Gaze ended")
+                            display.stop()
 
             # End of Main Loop
 

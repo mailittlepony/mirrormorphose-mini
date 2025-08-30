@@ -75,6 +75,7 @@ def capture(preview=False):
             if preview_cap is None or not preview_cap.isOpened():
                 return False, None
             ret, frame = preview_cap.read()
+            frame = cv2.flip(frame, 0)
             if ret:
                 _last_preview_frame = frame.copy()
             return ret, frame
@@ -83,6 +84,7 @@ def capture(preview=False):
             if full_cap is None or not full_cap.isOpened():
                 return False, None
             ret, frame = full_cap.read()
+            frame = cv2.flip(frame, 0)
             if ret:
                 _last_full_frame = frame.copy()
             return ret, frame

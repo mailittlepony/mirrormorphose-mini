@@ -10,6 +10,7 @@ from typing import Optional
 import numpy as np
 
 import app.config as cfg
+from app.core.api import runway
 from app.utils import image_processing, video_processing
 from .face_movie_wrapper import align_faces, run_morph
 from ..camera.gaze_tracker.gaze_tracker import GazeTracker
@@ -17,8 +18,9 @@ from ..camera.gaze_tracker.gaze_tracker import GazeTracker
 
 logger = logging.getLogger(__name__)
 
-def generate_morph_specialized(tracker: GazeTracker) -> bool:
+def preprocess(tracker: GazeTracker) -> bool:
     try:
+        global morph_input_dir
         align_input1_dir = cfg.MORPH_TMP_DIR/"align_input1"
         align_input2_dir = cfg.MORPH_TMP_DIR/"align_input2"
         align_output1_dir = cfg.MORPH_TMP_DIR/"align_output1"
@@ -63,10 +65,19 @@ def generate_morph_specialized(tracker: GazeTracker) -> bool:
         capture_img = cv2.imread(str(user_capture_rembg_path))
         child_img = cv2.imread(str(user_child_rembg_path))
 
+        if capture_img is None or child_img is None:
+            raise RuntimeError("Could not read pictures.")
+
         capture_img = image_processing.resize_and_crop_to_match(capture_img, child_img)
         cv2.imwrite(str(align_input2_dir/"0.jpg"), capture_img)
 
         # Call runway and extract frame
+        if not runway.test_video:
+            url = runway.generate_video(child_img)
+            if url is None:
+                raise RuntimeError("Runway API failed to generate the video.")
+            video_processing.download_video(url, cfg.GENERATED_VIDEO_PATH)
+
         extracted_frame_path = morph_input_dir/"1.jpg"
         video_processing.extract_frame(cfg.GENERATED_VIDEO_PATH, extracted_frame_path, frame_number=0)
 
@@ -82,6 +93,16 @@ def generate_morph_specialized(tracker: GazeTracker) -> bool:
             logger.error("Capture-1st runway frame alignment failed")
             return False
 
+    except Exception as e:
+        logger.exception(f"Unexpected error during morph preprocessing: {e}")
+        return False
+
+    return True
+
+
+def generate_morph_specialized() -> bool:
+    global morph_input_dir
+    try:
         return run_morph(
             cfg.FACE_MOVIE_MORPH_SCRIPT,
             morph_input_dir,

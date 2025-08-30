@@ -33,7 +33,8 @@ def start() -> GazeTracker:
     global _tracker
     _tracker = GazeTracker(enable_tracking=True, model_dir=str(cfg.MODEL_DIR))
 
-    # Prepare the three video to display (morph, ai_video, reversed_ai_video)
+    # # Prepare the three video to display (morph, ai_video, reversed_ai_video)
+    morph.preprocess(_tracker)
     morph.generate_morph_specialized()
 
     # Reverse generated video
