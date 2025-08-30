@@ -7,10 +7,10 @@
 
 import signal, sys, time, queue
 
-from . import config as cfg
+from app.core import experience
+
 from .server import server
 from .core.camera import camera
-from .core.camera.gaze_tracker.gaze_tracker import GazeTracker
 
 running = True
 
@@ -28,30 +28,29 @@ def run():
     print("Mirrormorphose-mini program v1.0")
     print("[INFO] Starting...")
 
-    command_queue = queue.Queue()
+    # command_queue = queue.Queue()
     try:
         # Module initialization
         server.run_async()
         camera.init()
-        tracker = None
+        tracker = experience.get_tracker()
 
         while running:
             start = time.time()
 
-            try:
-                command = command_queue.get_nowait()
-            except queue.Empty:
-                command = None
+            # try:
+            #     command = command_queue.get_nowait()
+            # except queue.Empty:
+            #     command = None
 
-            if command == "START_TRACKING":
-                tracker = GazeTracker(enable_tracking=True, model_dir=str(cfg.MODEL_DIR))
-            elif command == "STOP_TRACKING":
-                del tracker
-                tracker = None
+            # if command == "START_EXPERIENCE":
+            #     tracker = experience.start()
+            # elif command == "STOP_EXPERIENCE":
+            #     experience.stop()
 
             # Start of Main Loop
 
-            # camera.capture(preview=False)
+            camera.capture(preview=False)
             camera.capture(preview=True)
 
             if tracker:

@@ -44,6 +44,7 @@ USER_CAPTURE_PATH= TEMP_DIR/"user_capture.jpg"
 USER_CHILD_PATH = TEMP_DIR/"user_child.jpg"
 MORPH_TMP_DIR = TEMP_DIR/"morph_tmp"
 GENERATED_VIDEO_PATH = TEMP_DIR/"generated_video.mp4"
+FINAL_GENERATED_VIDEO_PATH = TEMP_DIR/"generated_video_final.mp4"
 MORPH_VIDEO_PATH = TEMP_DIR/"morph_video.mp4"
 FACE_MOVIE_FACE_ALIGN_SCRIPT = Path("app/core/morph/face-movie/face-movie/align.py")
 FACE_MOVIE_MORPH_SCRIPT = Path("app/core/morph/face-movie/face-movie/main.py")

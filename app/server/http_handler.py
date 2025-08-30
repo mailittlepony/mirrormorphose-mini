@@ -10,6 +10,8 @@ from mimetypes import guess_type
 from urllib.parse import unquote
 import os, cv2, time
 
+from app.core import experience
+
 from ..core.camera import camera
 
 class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -25,6 +27,8 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         routes = {
+            "/api/experience/start": lambda: self._handle_experience("start"),
+            "/api/experience/stop": lambda: self._handle_experience("stop"),
         }
         handler = routes.get(self.path)
         if handler:
@@ -90,6 +94,16 @@ class MirrorHTTPRequestHandler(BaseHTTPRequestHandler):
     """
     POST Handlers 
     """
+    def _handle_experience(self, state: str):
+        try:
+            if state == "start":
+                experience.start()
+            elif state == "stop":
+                experience.stop()
+        except Exception as e:
+            self._send_response_str(500, f"Experience crashed : {e}")
+
+        self._send_response_str(200, "Experience started succesfully.")
 
     """
     Helpers
