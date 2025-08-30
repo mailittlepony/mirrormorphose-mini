@@ -21,7 +21,7 @@ TEMP_DIR = RAMDISK_DIR/"tmp"
 
 # APIs
 load_dotenv()
-RUNWAY_AUTH_TOKEN = getenv("AUTH_TOKEN", "")
+RUNWAY_AUTH_TOKEN = getenv("RUNWAYML_API_SECRET")
 
 # Camera
 VIDEO_DEVICE_PREVIEW = "/dev/video12"
@@ -34,7 +34,7 @@ CAMERA_FULL_HEIGHT = 480
 CAMERA_FULL_FORMAT = 'UYVY'
 
 # Face detection/recognition
-MODEL_DIR = Path("app/core/camera/models")
+MODEL_DIR = Path("app/res/models")
 FACE_CASCADE_PATH = MODEL_DIR/"haarcascade_frontalface_default.xml"
 EYE_CASCADE_PATH = MODEL_DIR/"haarcascade_eye_tree_eyeglasses.xml"
 
@@ -43,5 +43,5 @@ SHADER_DIR = Path("app/core/display/shaders")
 
 # Morph
 TEMP_REMBG_DIR = TEMP_DIR/"tmp_rembg"
-FACE_MOVIE_FACE_ALIGN_SCRIPT = "app/core/morph/face-movie/face-movie/align.py"
-FACE_MOVIE_MORPH_SCRIPT = "app/core/morph/face-movie/face-movie/main.py"
+FACE_MOVIE_FACE_ALIGN_SCRIPT = Path("app/core/morph/face-movie/face-movie/align.py")
+FACE_MOVIE_MORPH_SCRIPT = Path("app/core/morph/face-movie/face-movie/main.py")

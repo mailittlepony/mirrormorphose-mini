@@ -1,3 +1,6 @@
 [submodule "app/core/camera/gaze_tracker"]
 	path = app/core/camera/gaze_tracker
 	url = https://github.com/mailittlepony/gaze_tracker
+[submodule "app/core/morph/face-movie"]
+	path = app/core/morph/face-movie
+	url = https://github.com/andrewdcampbell/face-movie
