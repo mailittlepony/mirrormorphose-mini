@@ -11,6 +11,7 @@ from app.core import experience
 
 from .server import server
 from .core.camera import camera
+from .core.display import display
 
 running = True
 
@@ -33,6 +34,7 @@ def run():
         # Module initialization
         server.run_async()
         camera.init()
+        display.init()
         tracker = experience.get_tracker()
 
         while running:
@@ -56,6 +58,12 @@ def run():
             if tracker:
                 state = tracker.get_eye_state(camera.read(preview=True))
                 print(state)
+                if (state == "straight"):
+                    if not display.is_playing:
+                        display.play()
+                else:
+                    if display.is_playing:
+                        display.stop()
 
             # End of Main Loop
 
@@ -67,6 +75,7 @@ def run():
     finally:
         server.close()
         camera.free()
+        display.close()
 
         print("[INFO] Program exited cleanly.")
         sys.exit(0)

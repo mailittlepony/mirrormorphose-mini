@@ -10,6 +10,7 @@ import cv2, os
 
 import app.config as cfg
 from .camera import camera
+from .display import display
 from .morph import morph
 from app.utils import video_processing
 from .camera.gaze_tracker.gaze_tracker import GazeTracker
@@ -42,6 +43,9 @@ def start() -> GazeTracker:
     global _tracker
     _tracker = GazeTracker(enable_tracking=True, model_dir=str(cfg.MODEL_DIR))
 
+    # Load video for the display
+    display.load_videos()
+
     return _tracker
 
 def get_tracker() -> Optional[GazeTracker]:
@@ -53,6 +57,8 @@ def stop() -> None:
     global _tracker
     del _tracker
     _tracker = None
+
+    display.stop()
 
     # Delete temp
     # os.rmdir(cfg.TEMP_DIR)
