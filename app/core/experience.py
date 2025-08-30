@@ -29,6 +29,10 @@ def start() -> GazeTracker:
     else:
         raise RuntimeError("Could not take a picture of the user.")
 
+    # Start gaze detection (new instance of GazeTracker)
+    global _tracker
+    _tracker = GazeTracker(enable_tracking=True, model_dir=str(cfg.MODEL_DIR))
+
     # Prepare the three video to display (morph, ai_video, reversed_ai_video)
     morph.generate_morph_specialized()
 
@@ -38,10 +42,6 @@ def start() -> GazeTracker:
 
     # Concatenate generated video + reversed generated video
     video_processing.concatenate_videos([cfg.GENERATED_VIDEO_PATH, reversed_video_path], cfg.FINAL_GENERATED_VIDEO_PATH)
-
-    # Start gaze detection (new instance of GazeTracker)
-    global _tracker
-    _tracker = GazeTracker(enable_tracking=True, model_dir=str(cfg.MODEL_DIR))
 
     # Load video for the display
     display.load_videos()

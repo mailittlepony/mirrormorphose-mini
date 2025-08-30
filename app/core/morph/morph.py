@@ -6,16 +6,18 @@
 # Distributed under terms of the GPLv3 license.
 
 import logging, cv2, shutil
-from pathlib import Path
+from typing import Optional
+import numpy as np
 
 import app.config as cfg
 from app.utils import image_processing, video_processing
 from .face_movie_wrapper import align_faces, run_morph
+from ..camera.gaze_tracker.gaze_tracker import GazeTracker
 
 
 logger = logging.getLogger(__name__)
 
-def generate_morph_specialized() -> bool:
+def generate_morph_specialized(tracker: GazeTracker) -> bool:
     try:
         align_input1_dir = cfg.MORPH_TMP_DIR/"align_input1"
         align_input2_dir = cfg.MORPH_TMP_DIR/"align_input2"
@@ -30,8 +32,13 @@ def generate_morph_specialized() -> bool:
         # Crop inputs
         user_capture_cropped_path = cfg.MORPH_TMP_DIR/f"{cfg.USER_CAPTURE_PATH.stem}_cropped{cfg.USER_CAPTURE_PATH.suffix}"
         user_child_cropped_path = cfg.MORPH_TMP_DIR/f"{cfg.USER_CHILD_PATH.stem}_cropped{cfg.USER_CHILD_PATH.suffix}"
-        image_processing.crop_face_contour(cfg.USER_CAPTURE_PATH, user_capture_cropped_path, offset=40)
-        image_processing.crop_face_contour(cfg.USER_CHILD_PATH, user_child_cropped_path, offset=40)
+
+        def landmark_fn(frame: np.ndarray) -> Optional[np.ndarray]:
+            tracker.get_eye_state(frame)
+            return tracker.get_landmarks()
+
+        image_processing.crop_face_contour(cfg.USER_CAPTURE_PATH, user_capture_cropped_path, landmark_fn, offset=40)
+        image_processing.crop_face_contour(cfg.USER_CHILD_PATH, user_child_cropped_path, landmark_fn, offset=40)
 
         # Remove background
         user_capture_rembg_path = cfg.MORPH_TMP_DIR/f"{cfg.USER_CAPTURE_PATH.stem}_rembg{cfg.USER_CAPTURE_PATH.suffix}"

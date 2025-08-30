@@ -7,14 +7,14 @@
 
 import cv2
 import numpy as np
-import mediapipe as mp
 from pathlib import Path
 from rembg import remove, new_session
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 def crop_face_contour(
     input_path: Union[str, Path],
     output_path: Union[str, Path],
+    get_face_landmarks: Callable[[np.ndarray], Optional[np.ndarray]],
     offset: int = 0
 ) -> None:
     """
@@ -40,20 +40,23 @@ def crop_face_contour(
     if image is None:
         raise RuntimeError(f"Failed to read image: {input_path}")
 
-    # Convert to RGB for MediaPipe
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # # Convert to RGB for MediaPipe
+    # image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    # Initialize MediaPipe Face Mesh
-    mp_face_mesh = mp.solutions.face_mesh
-    face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1)
+    # # Initialize MediaPipe Face Mesh
+    # mp_face_mesh = mp.solutions.face_mesh
+    # face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1)
 
-    results = face_mesh.process(image_rgb)
-    face_mesh.close()
+    # results = face_mesh.process(image_rgb)
+    # face_mesh.close()
 
-    if not results.multi_face_landmarks:
+    # if not results.multi_face_landmarks:
+    #     raise RuntimeError("No face detected in the image.")
+
+    # landmarks = results.multi_face_landmarks[0].landmark
+    landmarks = get_face_landmarks(image)
+    if landmarks is None:
         raise RuntimeError("No face detected in the image.")
-
-    landmarks = results.multi_face_landmarks[0].landmark
 
     h, w, _ = image.shape
 
